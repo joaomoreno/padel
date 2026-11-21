@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Padel Americano</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Barlow+Condensed:wght@600;700&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: club scoreboard — loud, clear, readable from across the room.
+   IDEA: each match is drawn as a top-down padel court, teams on either side of the net.
+   PICTURE: the live court grid itself, sized to fill the screen for 1–8 courts.
+   COLOUR and TYPE: court blue fields, white lines, ball-yellow for winners and the next action; Barlow family.
+   LAYOUT: blue header band, courts left, standings column right; stacks on narrow screens. */
+:root{color-scheme:light dark;--bg:light-dark(#fff,#0b101b);--ink:light-dark(#0c1424,#eef2f8);--mute:light-dark(#5d6777,#97a3b6);--line:light-dark(#e3e7ee,#1f2a3d);--panel:light-dark(#f4f6f9,#121b2b);--court:#1b57d1;--deep:#103a96;--ball:#d7f23c;--bink:#1a2300;--up:light-dark(#0f8a4a,#4bd68a);--down:#e5484d}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:500 16px/1.4 Barlow,system-ui,sans-serif;overflow:hidden;-webkit-font-smoothing:antialiased}
+button,input,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+.cn{font-family:'Barlow Condensed',Barlow,sans-serif;font-weight:700;font-variant-numeric:tabular-nums}
+.sc2{font-family:'Barlow Semi Condensed',Barlow,sans-serif}
+.view{display:grid;grid-template-rows:auto 1fr;height:100vh}
+.top{display:flex;align-items:center;gap:14px;padding:10px 18px;background:var(--deep);color:#fff;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}
+.brand svg{width:36px;height:36px;flex:none}
+.ttl{font:700 26px/1 'Barlow Semi Condensed',sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:34vw}
+.meta{font-size:14px;opacity:.8;margin-top:3px}
+.rnd{font:700 34px/1 'Barlow Condensed',sans-serif;padding-left:16px;border-left:1px solid rgba(255,255,255,.25);white-space:nowrap}
+.sp{flex:1}
+.prog{display:flex;align-items:center;gap:6px;font-size:15px;white-space:nowrap}
+.dot{width:12px;height:12px;border-radius:50%;border:2px solid rgba(255,255,255,.55)}
+.dot.on{background:var(--ball);border-color:var(--ball)}
+.btn{height:44px;padding:0 16px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;font-weight:600;white-space:nowrap}
+.btn:hover{background:rgba(255,255,255,.1)}
+.btn.ic{width:44px;padding:0;display:grid;place-items:center}
+.btn.go{background:var(--ball);color:var(--bink);border:0;font-weight:700;font-size:18px;padding:0 22px}
+.btn.go:hover{filter:brightness(1.06)}
+.btn:disabled{opacity:.4;cursor:not-allowed;filter:none}
+:focus-visible{outline:3px solid var(--ball);outline-offset:2px}
+.main{display:grid;grid-template-columns:minmax(0,1fr) clamp(330px,31vw,520px);gap:16px;padding:16px;min-height:0}
+.courts{--g:14px;--c:2;--r:1;display:flex;flex-wrap:wrap;gap:var(--g);align-content:stretch;justify-content:center;min-height:0}
+.court{width:calc((100% - (var(--c) - 1) * var(--g)) / var(--c));height:calc((100% - (var(--r) - 1) * var(--g)) / var(--r));container-type:size;position:relative;border:0;border-radius:12px;padding:0;background:radial-gradient(130% 100% at 50% 0%,#2f6ff2,var(--court) 55%,#1446b2);color:#fff;display:grid;grid-template-columns:1fr 1fr;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 8px 20px -10px rgba(10,30,90,.6);transition:transform .12s}
+.court:hover{transform:translateY(-2px)}
+.lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.half{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:13cqh 5cqi 5cqh;gap:1cqh}
+.nm{font:600 min(13.5cqh,6.6cqi)/1.08 'Barlow Semi Condensed',sans-serif;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scr{font:700 min(34cqh,15cqi)/1 'Barlow Condensed',sans-serif;margin-top:2cqh;font-variant-numeric:tabular-nums}
+.scr.win{color:var(--ball)}.scr.lose{opacity:.6}.scr.none{opacity:.35}
+.clab{position:absolute;top:4cqh;left:3cqi;font:700 min(8cqh,4cqi)/1 'Barlow Condensed',sans-serif;background:rgba(0,10,40,.35);padding:.28em .55em;border-radius:5px;display:flex;align-items:center;gap:.3em}
+.clab svg{width:1em;height:1em}
+.hint{position:absolute;top:4cqh;right:3cqi;font:700 min(7cqh,3.6cqi)/1 Barlow,sans-serif;background:var(--ball);color:var(--bink);padding:.35em .6em;border-radius:5px}
+.rank{display:flex;flex-direction:column;background:var(--panel);border-radius:12px;padding:14px 12px 8px;min-height:0}
+.rank h2{margin:0 4px 10px;font:700 26px/1 'Barlow Semi Condensed',sans-serif;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.rank h2 small{font:500 14px Barlow,sans-serif;color:var(--mute)}
+.rh,.rr{display:grid;grid-template-columns:2.7em minmax(0,1fr) 2.7em 1.8em 2.6em 2.9em;align-items:center;gap:.35em;padding:0 .35em}
+.rh{font-size:13px;color:var(--mute);padding-bottom:6px;border-bottom:2px solid var(--line)}
+.rh>:nth-child(n+4),.rr>:nth-child(n+4){text-align:right}
+.rl{flex:1;min-height:0;display:flex;flex-direction:column;container-type:size}
+.rr{flex:1 1 0;max-height:54px;font-size:clamp(13px,calc(56cqh / var(--n)),25px);line-height:1.1;overflow:hidden;border-bottom:1px solid var(--line)}
+.pos{display:flex;align-items:center;gap:.2em}
+.pos b{font:700 1em/1 'Barlow Condensed',sans-serif;min-width:1.3em;text-align:center;border-radius:4px;padding:.12em 0}
+.rr.lead .pos b{background:var(--ball);color:var(--bink)}
+.mv{font:700 .58em/1 Barlow,sans-serif}.mv.u{color:var(--up)}.mv.d{color:var(--down)}
+.pn{font:600 1em/1.1 'Barlow Semi Condensed',sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cp{font:700 .78em/1 'Barlow Condensed',sans-serif;background:var(--court);color:#fff;border-radius:4px;padding:.22em 0;text-align:center}
+.cp.bye{background:none;color:var(--mute);border:1px dashed var(--mute)}
+.rr .cn{font-size:.95em;color:var(--mute)}
+.rr .pt{font-size:1.15em;color:var(--ink)}
+/* setup */
+.setup{overflow:auto}
+.form{max-width:1100px;width:100%;margin:0 auto;padding:28px 20px 40px;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:32px;align-content:start}
+.form h1{grid-column:1/-1;margin:0;font:700 44px/1.05 'Barlow Semi Condensed',sans-serif;text-wrap:balance}
+.fld{margin-bottom:22px}
+.fld>label,.lbl{display:block;font-weight:700;margin-bottom:8px;font-size:17px}
+.fld p{margin:8px 0 0;color:var(--mute);font-size:15px}
+.inp{width:100%;height:50px;padding:0 14px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-size:18px}
+.seg{display:flex;gap:8px;flex-wrap:wrap}
+.seg button,.stp button{height:50px;min-width:50px;padding:0 18px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-weight:600;font-size:17px}
+.seg button.on{background:var(--court);border-color:var(--court);color:#fff}
+.stp{display:flex;align-items:center;gap:10px}
+.stp output{font:700 40px/1 'Barlow Condensed',sans-serif;min-width:1.4em;text-align:center}
+textarea{width:100%;min-height:380px;resize:vertical;padding:12px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font:500 19px/1.6 Barlow,sans-serif}
+.sum{margin-top:12px;padding:14px 16px;border-radius:10px;background:var(--panel);font-size:16px}
+.sum b{font:700 22px 'Barlow Condensed',sans-serif}
+.sum .warn{color:var(--down);font-weight:600}
+.lnk{background:none;border:0;padding:0;color:var(--court);font-weight:600;text-decoration:underline;text-underline-offset:3px}
+:root[data-theme=dark] .lnk{color:#7aa7ff}
+.acts{display:flex;gap:12px;margin-top:18px;flex-wrap:wrap}
+.b2{height:50px;padding:0 22px;border-radius:9px;border:1px solid var(--line);background:var(--panel);font-weight:700;font-size:17px}
+.b2.pri{background:var(--court);border-color:var(--court);color:#fff}
+.b2.big{background:var(--ball);border:0;color:var(--bink);font-size:19px;padding:0 30px}
+.b2.dng{color:var(--down)}
+/* dialogs */
+.ov{position:fixed;inset:0;background:rgba(4,10,24,.6);display:grid;place-items:center;padding:16px;z-index:20;animation:f .12s ease-out}
+@keyframes f{from{opacity:0}}
+.dlg{background:var(--bg);color:var(--ink);border-radius:14px;padding:24px;width:min(760px,100%);max-height:calc(100vh - 32px);overflow:auto;box-shadow:0 30px 80px -20px rgba(0,0,0,.5)}
+.dlg.sm{width:min(460px,100%)}
+.dlg h3{margin:0;font:700 30px/1.1 'Barlow Semi Condensed',sans-serif}
+.dlg .lead{margin:6px 0 0;color:var(--mute);font-size:17px}
+.vs{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:stretch;margin:18px 0}
+.tm{background:var(--court);color:#fff;border-radius:10px;padding:12px 10px;text-align:center;font:600 21px/1.2 'Barlow Semi Condensed',sans-serif}
+.tm .cn{display:block;font-size:56px;line-height:1;margin-top:6px}
+.tm.w .cn{color:var(--ball)}
+.vs i{align-self:center;font-style:normal;color:var(--mute);font-weight:700}
+.pad{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px}
+.pad button{height:54px;border-radius:8px;border:1px solid var(--line);background:var(--panel);font:700 24px/1 'Barlow Condensed',sans-serif}
+.pad button:hover{border-color:var(--court)}
+.pad button.on{background:var(--ball);color:var(--bink);border-color:var(--ball)}
+.padl{font-weight:600;margin-bottom:8px}
+.de{display:flex;justify-content:space-between;gap:10px;margin-top:20px;flex-wrap:wrap}
+.menu{position:fixed;z-index:30;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:6px;min-width:240px;box-shadow:0 20px 50px -15px rgba(0,0,0,.45)}
+.menu button{display:block;width:100%;text-align:left;height:46px;padding:0 14px;border:0;background:none;border-radius:7px;font-weight:600;font-size:16px}
+.menu button:hover{background:var(--panel)}
+.menu .dng{color:var(--down)}
+.hr{margin:18px 0 0}
+.hr h4{margin:0 0 8px;font:700 20px/1 'Barlow Semi Condensed',sans-serif}
+.hm{display:grid;grid-template-columns:3.2em minmax(0,1fr) 4.4em minmax(0,1fr);align-items:center;gap:10px;width:100%;padding:8px 12px;margin-bottom:6px;border-radius:8px;border:1px solid var(--line);background:var(--panel);text-align:left;font-size:16px}
+.hm:hover{border-color:var(--court)}
+.hm .r{text-align:right}
+.hm .s{text-align:center;font-size:22px}
+.hb{color:var(--mute);font-size:15px}
+@media (max-width:900px){
+  body{overflow:auto}.view{height:auto;min-height:100vh}
+  .main{grid-template-columns:1fr}
+  .courts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
+  .court{width:auto;height:auto;aspect-ratio:2/1}
+  .rl{container-type:normal}.rr{flex:none;min-height:42px;font-size:18px}
+  .ttl{max-width:60vw}.rnd{font-size:28px}
+  .form{grid-template-columns:1fr}.form h1{font-size:34px}
+}
+@media (prefers-reduced-motion:reduce){.court,.ov{transition:none;animation:none}.court:hover{transform:none}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="layer"></div>
+<script>
+{
+const KEY = 'padel-tourney-v1';
+const BALL = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#d7f23c"/><path d="M6 9c8 4 8 18 0 22M34 9c-8 4-8 18 0 22" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>';
+const LINES = '<svg class="lines" viewBox="0 0 200 100" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="#fff" vector-effect="non-scaling-stroke"><rect x="4" y="5" width="192" height="90" stroke-opacity=".45" stroke-width="2" vector-effect="non-scaling-stroke"/><path d="M36 5V95M164 5V95M36 50H164" stroke-opacity=".3" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M100 2V98" stroke-opacity=".85" stroke-width="3" stroke-dasharray="1 2" vector-effect="non-scaling-stroke"/></g></svg>';
+const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#d7f23c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const FS = '<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3 7V3h4M13 3h4v4M17 13v4h-4M7 17H3v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+const DOTS = '<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="2" fill="currentColor"/><circle cx="10" cy="10" r="2" fill="currentColor"/><circle cx="16" cy="10" r="2" fill="currentColor"/></svg>';
+const SAMPLE = 'Ana\nBruno\nCarla\nDiego\nElena\nFelix\nGina\nHugo\nIris\nJonas\nKatja\nLuca\nMara\nNico\nOlga\nPablo\nQuinn\nRosa\nSven\nTina';
+
+const app = document.getElementById('app'), layer = document.getElementById('layer');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
+const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+let S = null;
+try { S = JSON.parse(localStorage.getItem(KEY)); if (!S || !S.rounds || !S.rounds.length) S = null; } catch (e) { S = null; }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+
+let view = S ? 'board' : 'setup';
+let draft = null;
+let scoring = null, confirmCb = null;
+const pname = i => S.players[i];
+
+/* ---------- tournament logic ---------- */
+function standings(rounds) {
+  const st = S.players.map((nm, i) => ({ i, nm, pts: 0, w: 0, d: 0, l: 0, diff: 0, gp: 0 }));
+  for (const r of rounds) {
+    const done = r.m.every(m => m.sa != null);
+    for (const m of r.m) {
+      if (m.sa == null) continue;
+      for (const [team, f, ag] of [[m.a, m.sa, m.sb], [m.b, m.sb, m.sa]]) for (const p of team) {
+        const s = st[p]; s.pts += f; s.gp++; s.diff += f - ag;
+        if (f > ag) s.w++; else if (f < ag) s.l++; else s.d++;
+      }
+    }
+    if (done) for (const p of r.bye) st[p].pts += S.total / 2;
+  }
+  st.sort((x, y) => y.pts - x.pts || y.w - x.w || y.diff - x.diff || x.nm.localeCompare(y.nm));
+  st.forEach((s, k) => { const p = st[k - 1]; s.rank = k && p.pts === s.pts && p.w === s.w && p.diff === s.diff ? p.rank : k + 1; });
+  return st;
+}
+
+function americano(act, nc) {
+  const n = S.players.length, P = [], O = [];
+  for (let i = 0; i < n; i++) { P.push(new Array(n).fill(0)); O.push(new Array(n).fill(0)); }
+  for (const r of S.rounds) for (const m of r.m) {
+    P[m.a[0]][m.a[1]]++; P[m.a[1]][m.a[0]]++; P[m.b[0]][m.b[1]]++; P[m.b[1]][m.b[0]]++;
+    for (const x of m.a) for (const y of m.b) { O[x][y]++; O[y][x]++; }
+  }
+  const cost = (a, b) => 100 * (P[a[0]][a[1]] + P[b[0]][b[1]]) + 10 * (O[a[0]][b[0]] + O[a[0]][b[1]] + O[a[1]][b[0]] + O[a[1]][b[1]]);
+  let best = null, bc = Infinity;
+  for (let t = 0; t < 800 && bc > 0; t++) {
+    const sh = shuffle(act); let c = 0; const gs = [];
+    for (let k = 0; k < nc; k++) {
+      const q = sh.slice(k * 4, k * 4 + 4);
+      const opts = [[[q[0], q[1]], [q[2], q[3]]], [[q[0], q[2]], [q[1], q[3]]], [[q[0], q[3]], [q[1], q[2]]]];
+      let bo = opts[0], bv = Infinity;
+      for (const o of opts) { const v = cost(o[0], o[1]); if (v < bv) { bv = v; bo = o; } }
+      c += bv; gs.push({ a: bo[0], b: bo[1] });
+      if (c >= bc) break;
+    }
+    if (gs.length === nc && c < bc) { bc = c; best = gs; }
+  }
+  return best;
+}
+
+function makeRound() {
+  const n = S.players.length, nc = Math.min(S.courts, Math.floor(n / 4));
+  const byes = new Array(n).fill(0);
+  S.rounds.forEach(r => r.bye.forEach(p => byes[p]++));
+  const ids = [...Array(n).keys()];
+  const bye = shuffle(ids).sort((a, b) => byes[a] - byes[b]).slice(0, n - nc * 4);
+  const act = ids.filter(i => !bye.includes(i));
+  let groups;
+  if (S.mode === 'mexicano' && S.rounds.length) {
+    const order = standings(S.rounds).map(s => s.i).filter(i => !bye.includes(i));
+    groups = [];
+    for (let k = 0; k < nc; k++) { const g = order.slice(k * 4, k * 4 + 4); groups.push({ a: [g[0], g[3]], b: [g[1], g[2]] }); }
+  } else groups = americano(act, nc);
+  S.rounds.push({ m: groups.map((g, c) => ({ c, a: g.a, b: g.b, sa: null, sb: null })), bye });
+}
+
+/* ---------- views ---------- */
+function parseNames(t) { return t.split(/[\n,;]+/).map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean); }
+
+function summaryHTML() {
+  const names = parseNames(draft.text), n = names.length;
+  const lower = names.map(s => s.toLowerCase());
+  const dup = [...new Set(lower.filter((s, i) => lower.indexOf(s) !== i))];
+  if (dup.length) return `<span class="warn">Duplicate name${dup.length > 1 ? 's' : ''}: ${esc(dup.join(', '))}. Every player needs a unique name.</span>`;
+  if (n < 4) return `<b>${n}</b> player${n === 1 ? '' : 's'} · <span class="warn">add at least 4 to start</span>`;
+  const nc = Math.min(draft.courts, Math.floor(n / 4)), out = n - nc * 4;
+  let s = `<b>${n}</b> players on <b>${nc}</b> court${nc > 1 ? 's' : ''}`;
+  if (nc < draft.courts) s += ` <br>Only ${nc} of ${draft.courts} courts can be filled.`;
+  if (out) s += `<br><b>${out}</b> sit${out === 1 ? 's' : ''} out each round, rotating fairly. Sitting out earns ${fmt(draft.total / 2)} points (half a game).`;
+  return s;
+}
+
+function renderSetup() {
+  if (!draft) draft = S ? { name: S.name, mode: S.mode, total: S.total, courts: S.courts, text: S.players.join('\n') }
+                        : { name: '', mode: 'americano', total: 24, courts: 4, text: '' };
+  const d = draft, seg = (act, v, lab) => `<button type="button" data-act="${act}" data-v="${v}" class="${String(d[act === 'mode' ? 'mode' : 'total']) === String(v) ? 'on' : ''}">${lab}</button>`;
+  app.innerHTML = `<div class="view setup">
+  <header class="top"><div class="brand">${BALL}<div class="ttl">Padel tournament</div></div><div class="sp"></div>
+  ${S ? `<button class="btn" data-act="back">Back to round ${S.rounds.length}</button>` : ''}</header>
+  <form class="form" id="sf" autocomplete="off">
+    <h1>${S ? 'Set up a new tournament' : 'Start a tournament'}</h1>
+    <div>
+      <div class="fld"><label for="tn">Event name</label><input class="inp" id="tn" value="${esc(d.name)}" placeholder="Friday Americano" maxlength="40"></div>
+      <div class="fld"><span class="lbl">Format</span><div class="seg">${seg('mode', 'americano', 'Americano')}${seg('mode', 'mexicano', 'Mexicano')}</div>
+        <p>${d.mode === 'americano' ? 'New partners and opponents every round, chosen to avoid repeats.' : 'Round 1 is random; then players are grouped by ranking — 1st &amp; 4th vs 2nd &amp; 3rd on each court.'}</p></div>
+      <div class="fld"><span class="lbl">Points per game</span><div class="seg">${[16, 21, 24, 32].map(v => seg('pts', v, v)).join('')}</div>
+        <p>Every rally counts as one point; both teams' scores add up to ${d.total}.</p></div>
+      <div class="fld"><span class="lbl">Courts</span><div class="stp"><button type="button" data-act="cdec" aria-label="Fewer courts">−</button><output>${d.courts}</output><button type="button" data-act="cinc" aria-label="More courts">+</button></div></div>
+    </div>
+    <div>
+      <div class="fld"><label for="pl">Players, one per line</label>
+        <textarea id="pl" spellcheck="false" placeholder="Ana&#10;Bruno&#10;Carla&#10;Diego&#10;…">${esc(d.text)}</textarea>
+        ${d.text.trim() ? '' : '<p><button type="button" class="lnk" data-act="sample">Fill in 20 sample names</button> to try it out.</p>'}
+        <div class="sum" id="sum">${summaryHTML()}</div></div>
+      <div class="acts"><button class="b2 big" type="submit">Start round 1</button>${S ? '<button type="button" class="b2" data-act="back">Cancel</button>' : ''}</div>
+    </div>
+  </form></div>`;
+  const pl = document.getElementById('pl');
+  pl.addEventListener('input', () => { draft.text = pl.value; document.getElementById('sum').innerHTML = summaryHTML(); });
+  document.getElementById('tn').addEventListener('input', e => { draft.name = e.target.value; });
+  document.getElementById('sf').addEventListener('submit', e => { e.preventDefault(); start(); });
+}
+
+function start() {
+  const names = parseNames(draft.text), lower = names.map(s => s.toLowerCase());
+  if (names.length < 4 || new Set(lower).size !== names.length) { document.getElementById('pl').focus(); return; }
+  const go = () => {
+    S = { name: draft.name.trim() || (draft.mode === 'mexicano' ? 'Padel Mexicano' : 'Padel Americano'), mode: draft.mode, total: draft.total, courts: draft.courts, players: names, rounds: [] };
+    makeRound(); save(); draft = null; view = 'board'; render();
+  };
+  if (S) ask('Start a new tournament?', `“${esc(S.name)}” — ${S.rounds.length} round${S.rounds.length > 1 ? 's' : ''} with ${S.players.length} players — will be deleted. This can’t be undone.`, 'Delete and start', go);
+  else go();
+}
+
+let ro = null;
+function fit() {
+  const c = app.querySelector('.courts'); if (!c) return;
+  const n = c.children.length, W = c.clientWidth, H = c.clientHeight, g = 14;
+  let best = 1, bs = 0;
+  for (let cols = 1; cols <= n; cols++) {
+    const rows = Math.ceil(n / cols), w = (W - (cols - 1) * g) / cols, h = (H - (rows - 1) * g) / rows;
+    const s = Math.min(w, h * 2.2);
+    if (s > bs + 0.5) { bs = s; best = cols; }
+  }
+  c.style.setProperty('--c', best); c.style.setProperty('--r', Math.ceil(n / best));
+}
+
+function renderBoard() {
+  const R = S.rounds.length, r = S.rounds[R - 1], T = S.total;
+  const done = r.m.filter(m => m.sa != null).length, all = done === r.m.length;
+  const st = standings(S.rounds), prev = R > 1 ? standings(S.rounds.slice(0, -1)) : null;
+  const prevRank = {}; if (prev) prev.forEach(s => prevRank[s.i] = s.rank);
+  const where = {}; r.m.forEach(m => [...m.a, ...m.b].forEach(p => where[p] = m.c + 1));
+  const half = (team, mine, theirs) => `<div class="half"><div class="nm">${esc(pname(team[0]))}</div><div class="nm">${esc(pname(team[1]))}</div>
+    <div class="scr ${mine == null ? 'none' : mine > theirs ? 'win' : mine < theirs ? 'lose' : ''}">${mine == null ? '–' : mine}</div></div>`;
+  const courts = r.m.map((m, k) => `<button class="court" data-act="score" data-r="${R - 1}" data-m="${k}" aria-label="Court ${m.c + 1}: enter score">
+    ${LINES}<span class="clab">Court ${m.c + 1}${m.sa != null ? CHECK : ''}</span>${m.sa == null ? '<span class="hint">Tap to score</span>' : ''}
+    ${half(m.a, m.sa, m.sb)}${half(m.b, m.sb, m.sa)}</button>`).join('');
+  const rows = st.map(s => {
+    const mv = prev ? prevRank[s.i] - s.rank : 0;
+    const c = where[s.i];
+    return `<div class="rr${s.rank === 1 && s.pts > 0 ? ' lead' : ''}"><span class="pos"><b>${s.rank}</b>${mv > 0 ? `<span class="mv u">▲${mv}</span>` : mv < 0 ? `<span class="mv d">▼${-mv}</span>` : ''}</span>
+      <span class="pn">${esc(s.nm)}</span><span class="cp${c ? '' : ' bye'}">${c ? 'C' + c : 'Out'}</span>
+      <span class="cn">${s.w}</span><span class="cn">${s.diff > 0 ? '+' : s.diff < 0 ? '−' : ''}${Math.abs(s.diff)}</span><span class="cn pt">${fmt(s.pts)}</span></div>`;
+  }).join('');
+  app.innerHTML = `<div class="view">
+  <header class="top"><div class="brand">${BALL}<div><div class="ttl">${esc(S.name)}</div><div class="meta">${S.mode === 'mexicano' ? 'Mexicano' : 'Americano'} · ${T} points · ${S.players.length} players</div></div></div>
+    <div class="rnd">Round ${R}</div><div class="sp"></div>
+    <div class="prog" aria-label="${done} of ${r.m.length} results in">${r.m.map(m => `<span class="dot${m.sa != null ? ' on' : ''}"></span>`).join('')}<span>&nbsp;${done}/${r.m.length} results</span></div>
+    <button class="btn ic" data-act="fs" title="Full screen" aria-label="Full screen">${FS}</button>
+    <button class="btn ic" data-act="menu" title="More" aria-label="More actions">${DOTS}</button>
+    <button class="btn go" data-act="next" ${all ? '' : 'disabled'} title="${all ? '' : 'Enter all results first'}">Next round →</button></header>
+  <main class="main"><section class="courts" aria-label="Courts">${courts}</section>
+    <aside class="rank" aria-label="Standings"><h2>Standings <small>${r.bye.length ? `Out this round: ${r.bye.map(p => esc(pname(p))).join(', ')}` : done ? 'Includes this round' : `After round ${R - 1}`}</small></h2>
+      <div class="rh"><span>#</span><span>Player</span><span>Court</span><span>W</span><span>+/−</span><span>Pts</span></div>
+      <div class="rl" style="--n:${Math.max(st.length, 8)}">${rows}</div></aside></main></div>`;
+  if (ro) ro.disconnect();
+  ro = new ResizeObserver(fit); ro.observe(app.querySelector('.courts'));
+  fit();
+}
+
+function render() { view === 'setup' ? renderSetup() : renderBoard(); }
+
+/* ---------- dialogs ---------- */
+function ask(title, msg, ok, cb) {
+  confirmCb = cb;
+  layer.innerHTML = `<div class="ov" data-act="close"><div class="dlg sm" role="alertdialog" aria-modal="true" aria-labelledby="ct" data-act="noop">
+    <h3 id="ct">${title}</h3><p class="lead">${msg}</p>
+    <div class="de"><button class="b2" data-act="close">Cancel</button><button class="b2 pri" data-act="ok" style="background:var(--down);border-color:var(--down)">${ok}</button></div></div></div>`;
+  layer.querySelector('[data-act=ok]').focus();
+}
+
+function openScore(ri, mi) {
+  const m = S.rounds[ri].m[mi];
+  scoring = { r: ri, m: mi, v: m.sa, buf: '' };
+  drawScore();
+}
+function drawScore() {
+  const { r, m: mi, v } = scoring, m = S.rounds[r].m[mi], T = S.total;
+  const b = v == null ? null : T - v, team = (t, s, o) => `<div class="tm${s != null && s > o ? ' w' : ''}">${esc(pname(t[0]))}<br>${esc(pname(t[1]))}<span class="cn">${s == null ? '–' : s}</span></div>`;
+  layer.innerHTML = `<div class="ov" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="st" data-act="noop">
+    <h3 id="st">Court ${m.c + 1} · Round ${r + 1}</h3><p class="lead">Pick the left team’s points — the other side fills in to ${T}. Or type a number and press Enter.</p>
+    <div class="vs">${team(m.a, v, b)}<i>vs</i>${team(m.b, b, v)}</div>
+    <div class="padl">Points for ${esc(pname(m.a[0]))} &amp; ${esc(pname(m.a[1]))}</div>
+    <div class="pad">${Array.from({ length: T + 1 }, (_, i) => `<button data-act="pick" data-v="${i}" class="${i === v ? 'on' : ''}">${i}</button>`).join('')}</div>
+    <div class="de"><span>${m.sa != null ? '<button class="b2 dng" data-act="clear">Clear result</button>' : ''}</span><button class="b2" data-act="close">Cancel</button></div></div></div>`;
+}
+function commit(v) {
+  const m = S.rounds[scoring.r].m[scoring.m];
+  m.sa = v; m.sb = v == null ? null : S.total - v;
+  save(); closeLayer(); render();
+}
+function closeLayer() { layer.innerHTML = ''; scoring = null; confirmCb = null; }
+
+function openMenu(btn) {
+  const R = S.rounds.length, rc = btn.getBoundingClientRect();
+  layer.innerHTML = `<div class="ov" data-act="close" style="background:transparent;animation:none"></div>
+    <div class="menu" role="menu" style="top:${rc.bottom + 6}px;right:${Math.max(8, innerWidth - rc.right)}px">
+    <button data-act="history" role="menuitem">Round history &amp; edit results</button>
+    <button data-act="undo" role="menuitem">${R > 1 ? `Remove round ${R}` : 'Reshuffle round 1'}</button>
+    <button data-act="new" role="menuitem" class="dng">New tournament…</button></div>`;
+  layer.querySelector('.menu button').focus();
+}
+
+function openHistory() {
+  const rounds = S.rounds.map((r, ri) => `<div class="hr"><h4>Round ${ri + 1}</h4>${r.m.map((m, mi) => `<button class="hm" data-act="score" data-r="${ri}" data-m="${mi}">
+      <span class="cn">C${m.c + 1}</span><span class="r">${esc(pname(m.a[0]))} &amp; ${esc(pname(m.a[1]))}</span><span class="cn s">${m.sa == null ? '–' : m.sa + '–' + m.sb}</span><span>${esc(pname(m.b[0]))} &amp; ${esc(pname(m.b[1]))}</span></button>`).join('')}
+      ${r.bye.length ? `<div class="hb">Sat out: ${r.bye.map(p => esc(pname(p))).join(', ')}</div>` : ''}</div>`).reverse().join('');
+  layer.innerHTML = `<div class="ov" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="ht" data-act="noop">
+    <h3 id="ht">Round history</h3><p class="lead">Tap a match to correct its score. Standings update immediately${S.mode === 'mexicano' ? '; pairings already made stay as they are' : ''}.</p>
+    ${rounds}<div class="de"><span></span><button class="b2" data-act="close">Done</button></div></div></div>`;
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const a = el.dataset.act;
+  if (a === 'noop') return;
+  if (a === 'close') { if (e.target.closest('[data-act]') === el) closeLayer(); return; }
+  switch (a) {
+    case 'mode': draft.mode = el.dataset.v; renderSetup(); break;
+    case 'pts': draft.total = +el.dataset.v; renderSetup(); break;
+    case 'cdec': draft.courts = Math.max(1, draft.courts - 1); renderSetup(); break;
+    case 'cinc': draft.courts = Math.min(10, draft.courts + 1); renderSetup(); break;
+    case 'sample': draft.text = SAMPLE.split('\n').slice(0, Math.max(4, draft.courts * 4)).join('\n'); renderSetup(); break;
+    case 'back': draft = null; view = 'board'; render(); break;
+    case 'score': openScore(+el.dataset.r, +el.dataset.m); break;
+    case 'pick': commit(+el.dataset.v); break;
+    case 'clear': commit(null); break;
+    case 'ok': { const cb = confirmCb; closeLayer(); cb && cb(); break; }
+    case 'next': if (S.rounds.at(-1).m.every(m => m.sa != null)) { makeRound(); save(); render(); } break;
+    case 'menu': openMenu(el); break;
+    case 'history': openHistory(); break;
+    case 'undo': {
+      const R = S.rounds.length, r = S.rounds[R - 1];
+      const act = () => { S.rounds.pop(); if (!S.rounds.length) makeRound(); save(); render(); };
+      if (r.m.some(m => m.sa != null)) ask(R > 1 ? `Remove round ${R}?` : 'Reshuffle round 1?', `Results already entered for this round will be lost${R > 1 ? `, and round ${R - 1} becomes the current round` : ''}.`, R > 1 ? 'Remove round' : 'Reshuffle', act);
+      else { closeLayer(); act(); }
+      break;
+    }
+    case 'new': closeLayer(); draft = null; view = 'setup'; render(); break;
+    case 'fs': try { const p = document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen(); p && p.catch(() => {}); } catch (err) {} break;
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && layer.innerHTML) { closeLayer(); return; }
+  if (!scoring) return;
+  if (/^\d$/.test(e.key)) {
+    scoring.buf = (scoring.buf + e.key).slice(-2);
+    let v = +scoring.buf; if (v > S.total) { scoring.buf = e.key; v = +e.key; }
+    scoring.v = v; drawScore();
+  } else if (e.key === 'Backspace') { scoring.buf = scoring.buf.slice(0, -1); scoring.v = scoring.buf ? +scoring.buf : S.rounds[scoring.r].m[scoring.m].sa; drawScore(); }
+  else if (e.key === 'Enter' && scoring.v != null) { e.preventDefault(); commit(scoring.v); }
+});
+
+render();
+}
+</script>
+</body>
+</html>
