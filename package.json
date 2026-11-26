@@ -1,0 +1,11 @@
+{
+  "name": "padel",
+  "private": true,
+  "description": "Padel Americano / Mexicano tournament app (single index.html)",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1"
+  }
+}
