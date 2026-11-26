@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Padel Americano</title>
+<title>Padel tournament</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@500;600;700&family=Barlow+Condensed:wght@600;700&family=Barlow+Semi+Condensed:wght@600;700&display=swap" rel="stylesheet">
@@ -59,7 +59,7 @@ button{cursor:pointer}
 .rh{font-size:13px;color:var(--mute);padding-bottom:6px;border-bottom:2px solid var(--line)}
 .rh>:nth-child(n+4),.rr>:nth-child(n+4){text-align:right}
 .rl{flex:1;min-height:0;display:flex;flex-direction:column;container-type:size}
-.rr{flex:1 1 0;max-height:54px;font-size:clamp(13px,calc(56cqh / var(--n)),25px);line-height:1.1;overflow:hidden;border-bottom:1px solid var(--line)}
+.rr{flex:1 1 0;max-height:54px;font-size:clamp(13px,min(calc(56cqh / var(--n)),4.4cqw),25px);line-height:1.1;overflow:hidden;border-bottom:1px solid var(--line)}
 .pos{display:flex;align-items:center;gap:.2em}
 .pos b{font:700 1em/1 'Barlow Condensed',sans-serif;min-width:1.3em;text-align:center;border-radius:4px;padding:.12em 0}
 .rr.lead .pos b{background:var(--ball);color:var(--bink)}
@@ -155,17 +155,20 @@ const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { c
 let S = null;
 try { S = JSON.parse(localStorage.getItem(KEY)); if (!S || !S.rounds || !S.rounds.length) S = null; } catch (e) { S = null; }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const DKEY = 'padel-draft-v1';
+const saveDraft = () => { try { draft ? localStorage.setItem(DKEY, JSON.stringify(draft)) : localStorage.removeItem(DKEY); } catch (e) {} };
 
-let view = S ? 'board' : 'setup';
 let draft = null;
-let scoring = null, confirmCb = null;
+try { draft = JSON.parse(localStorage.getItem(DKEY)); if (!draft || typeof draft.text !== 'string') draft = null; } catch (e) { draft = null; }
+let view = S && !draft ? 'board' : 'setup';
+let scoring = null, confirmCb = null, opener = null;
 const pname = i => S.players[i];
 
 /* ---------- tournament logic ---------- */
 function standings(rounds) {
   const st = S.players.map((nm, i) => ({ i, nm, pts: 0, w: 0, d: 0, l: 0, diff: 0, gp: 0 }));
-  for (const r of rounds) {
-    const done = r.m.every(m => m.sa != null);
+  rounds.forEach((r, ri) => {
+    const done = ri < rounds.length - 1 || r.m.every(m => m.sa != null);
     for (const m of r.m) {
       if (m.sa == null) continue;
       for (const [team, f, ag] of [[m.a, m.sa, m.sb], [m.b, m.sb, m.sa]]) for (const p of team) {
@@ -174,7 +177,7 @@ function standings(rounds) {
       }
     }
     if (done) for (const p of r.bye) st[p].pts += S.total / 2;
-  }
+  });
   st.sort((x, y) => y.pts - x.pts || y.w - x.w || y.diff - x.diff || x.nm.localeCompare(y.nm));
   st.forEach((s, k) => { const p = st[k - 1]; s.rank = k && p.pts === s.pts && p.w === s.w && p.diff === s.diff ? p.rank : k + 1; });
   return st;
@@ -221,7 +224,12 @@ function makeRound() {
 }
 
 /* ---------- views ---------- */
-function parseNames(t) { return t.split(/[\n,;]+/).map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean); }
+function parseNames(t) {
+  const lines = t.split(/\n/).map(s => s.trim()).filter(Boolean);
+  const parts = lines.length === 1 ? lines[0].split(/[,;]+/) : lines;
+  return parts.map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+}
+const sampleCount = courts => Math.min(SAMPLE.split('\n').length, Math.max(4, courts * 4));
 
 function summaryHTML() {
   const names = parseNames(draft.text), n = names.length;
@@ -256,14 +264,15 @@ function renderSetup() {
     <div>
       <div class="fld"><label for="pl">Players, one per line</label>
         <textarea id="pl" spellcheck="false" placeholder="Ana&#10;Bruno&#10;Carla&#10;Diego&#10;…">${esc(d.text)}</textarea>
-        ${d.text.trim() ? '' : '<p><button type="button" class="lnk" data-act="sample">Fill in 20 sample names</button> to try it out.</p>'}
+        ${d.text.trim() ? '' : `<p><button type="button" class="lnk" data-act="sample">Fill in ${sampleCount(d.courts)} sample names</button> to try it out.</p>`}
         <div class="sum" id="sum">${summaryHTML()}</div></div>
       <div class="acts"><button class="b2 big" type="submit">Start round 1</button>${S ? '<button type="button" class="b2" data-act="back">Cancel</button>' : ''}</div>
     </div>
   </form></div>`;
   const pl = document.getElementById('pl');
-  pl.addEventListener('input', () => { draft.text = pl.value; document.getElementById('sum').innerHTML = summaryHTML(); });
-  document.getElementById('tn').addEventListener('input', e => { draft.name = e.target.value; });
+  pl.addEventListener('input', () => { draft.text = pl.value; saveDraft(); document.getElementById('sum').innerHTML = summaryHTML(); });
+  document.getElementById('tn').addEventListener('input', e => { draft.name = e.target.value; saveDraft(); });
+  saveDraft();
   document.getElementById('sf').addEventListener('submit', e => { e.preventDefault(); start(); });
 }
 
@@ -272,7 +281,7 @@ function start() {
   if (names.length < 4 || new Set(lower).size !== names.length) { document.getElementById('pl').focus(); return; }
   const go = () => {
     S = { name: draft.name.trim() || (draft.mode === 'mexicano' ? 'Padel Mexicano' : 'Padel Americano'), mode: draft.mode, total: draft.total, courts: draft.courts, players: names, rounds: [] };
-    makeRound(); save(); draft = null; view = 'board'; render();
+    makeRound(); save(); draft = null; saveDraft(); view = 'board'; render();
   };
   if (S) ask('Start a new tournament?', `“${esc(S.name)}” — ${S.rounds.length} round${S.rounds.length > 1 ? 's' : ''} with ${S.players.length} players — will be deleted. This can’t be undone.`, 'Delete and start', go);
   else go();
@@ -293,7 +302,9 @@ function fit() {
 
 function renderBoard() {
   const R = S.rounds.length, r = S.rounds[R - 1], T = S.total;
-  const done = r.m.filter(m => m.sa != null).length, all = done === r.m.length;
+  const done = r.m.filter(m => m.sa != null).length;
+  const gap = S.rounds.findIndex(x => x.m.some(m => m.sa == null)), all = gap === -1;
+  const nextTitle = all ? '' : gap < R - 1 ? `Round ${gap + 1} is missing a result` : 'Enter all results first';
   const st = standings(S.rounds), prev = R > 1 ? standings(S.rounds.slice(0, -1)) : null;
   const prevRank = {}; if (prev) prev.forEach(s => prevRank[s.i] = s.rank);
   const where = {}; r.m.forEach(m => [...m.a, ...m.b].forEach(p => where[p] = m.c + 1));
@@ -312,10 +323,10 @@ function renderBoard() {
   app.innerHTML = `<div class="view">
   <header class="top"><div class="brand">${BALL}<div><div class="ttl">${esc(S.name)}</div><div class="meta">${S.mode === 'mexicano' ? 'Mexicano' : 'Americano'} · ${T} points · ${S.players.length} players</div></div></div>
     <div class="rnd">Round ${R}</div><div class="sp"></div>
-    <div class="prog" aria-label="${done} of ${r.m.length} results in">${r.m.map(m => `<span class="dot${m.sa != null ? ' on' : ''}"></span>`).join('')}<span>&nbsp;${done}/${r.m.length} results</span></div>
+    <div class="prog" aria-label="${done} of ${r.m.length} results in">${r.m.map(m => `<span class="dot${m.sa != null ? ' on' : ''}"></span>`).join('')}<span>&nbsp;${done}/${r.m.length} results${done === r.m.length && !all ? ` · <b class="warn">round ${gap + 1} incomplete</b>` : ''}</span></div>
     <button class="btn ic" data-act="fs" title="Full screen" aria-label="Full screen">${FS}</button>
     <button class="btn ic" data-act="menu" title="More" aria-label="More actions">${DOTS}</button>
-    <button class="btn go" data-act="next" ${all ? '' : 'disabled'} title="${all ? '' : 'Enter all results first'}">Next round →</button></header>
+    <button class="btn go" data-act="next" ${all ? '' : 'disabled'} title="${nextTitle}">Next round →</button></header>
   <main class="main"><section class="courts" aria-label="Courts">${courts}</section>
     <aside class="rank" aria-label="Standings"><h2>Standings <small>${r.bye.length ? `Out this round: ${r.bye.map(p => esc(pname(p))).join(', ')}` : done ? 'Includes this round' : `After round ${R - 1}`}</small></h2>
       <div class="rh"><span>#</span><span>Player</span><span>Court</span><span>W</span><span>+/−</span><span>Pts</span></div>
@@ -325,7 +336,10 @@ function renderBoard() {
   fit();
 }
 
-function render() { view === 'setup' ? renderSetup() : renderBoard(); }
+function render() {
+  view === 'setup' ? renderSetup() : renderBoard();
+  document.title = view === 'board' && S ? `${S.name} · Round ${S.rounds.length}` : 'Padel tournament';
+}
 
 /* ---------- dialogs ---------- */
 function ask(title, msg, ok, cb) {
@@ -336,27 +350,40 @@ function ask(title, msg, ok, cb) {
   layer.querySelector('[data-act=ok]').focus();
 }
 
-function openScore(ri, mi) {
+function openScore(ri, mi, fromHistory) {
   const m = S.rounds[ri].m[mi];
-  scoring = { r: ri, m: mi, v: m.sa, buf: '' };
+  const hist = fromHistory ? layer.querySelector('.dlg')?.scrollTop || 0 : null;
+  scoring = { r: ri, m: mi, v: m.sa, buf: '', hist };
   drawScore();
 }
 function drawScore() {
   const { r, m: mi, v } = scoring, m = S.rounds[r].m[mi], T = S.total;
   const b = v == null ? null : T - v, team = (t, s, o) => `<div class="tm${s != null && s > o ? ' w' : ''}">${esc(pname(t[0]))}<br>${esc(pname(t[1]))}<span class="cn">${s == null ? '–' : s}</span></div>`;
-  layer.innerHTML = `<div class="ov" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="st" data-act="noop">
+  layer.innerHTML = `<div class="ov" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="st" data-act="noop" tabindex="-1">
     <h3 id="st">Court ${m.c + 1} · Round ${r + 1}</h3><p class="lead">Pick the left team’s points — the other side fills in to ${T}. Or type a number and press Enter.</p>
     <div class="vs">${team(m.a, v, b)}<i>vs</i>${team(m.b, b, v)}</div>
     <div class="padl">Points for ${esc(pname(m.a[0]))} &amp; ${esc(pname(m.a[1]))}</div>
     <div class="pad">${Array.from({ length: T + 1 }, (_, i) => `<button data-act="pick" data-v="${i}" class="${i === v ? 'on' : ''}">${i}</button>`).join('')}</div>
     <div class="de"><span>${m.sa != null ? '<button class="b2 dng" data-act="clear">Clear result</button>' : ''}</span><button class="b2" data-act="close">Cancel</button></div></div></div>`;
+  layer.querySelector('.dlg').focus();
 }
 function commit(v) {
   const m = S.rounds[scoring.r].m[scoring.m];
   m.sa = v; m.sb = v == null ? null : S.total - v;
-  save(); closeLayer(); render();
+  save();
+  if (scoring.hist != null) { const top = scoring.hist; render(); scoring = null; openHistory(top); }
+  else { closeLayer(); render(); }
 }
-function closeLayer() { layer.innerHTML = ''; scoring = null; confirmCb = null; }
+function closeLayer() { layer.innerHTML = ''; scoring = null; confirmCb = null; queueMicrotask(restoreFocus); }
+// Escape / Cancel: a score opened from Round history goes back to the history
+function dismiss() { if (scoring && scoring.hist != null) { const top = scoring.hist; scoring = null; openHistory(top); } else closeLayer(); }
+// Put focus back on whatever opened the dialog (the board is re-rendered, so look it up again)
+function restoreFocus() {
+  if (layer.innerHTML || !opener) return;
+  const sel = Object.entries(opener).map(([k, v]) => `[data-${k}="${CSS.escape(v)}"]`).join('');
+  opener = null;
+  const el = app.querySelector(sel); if (el) el.focus();
+}
 
 function openMenu(btn) {
   const R = S.rounds.length, rc = btn.getBoundingClientRect();
@@ -368,13 +395,14 @@ function openMenu(btn) {
   layer.querySelector('.menu button').focus();
 }
 
-function openHistory() {
+function openHistory(top = 0) {
   const rounds = S.rounds.map((r, ri) => `<div class="hr"><h4>Round ${ri + 1}</h4>${r.m.map((m, mi) => `<button class="hm" data-act="score" data-r="${ri}" data-m="${mi}">
       <span class="cn">C${m.c + 1}</span><span class="r">${esc(pname(m.a[0]))} &amp; ${esc(pname(m.a[1]))}</span><span class="cn s">${m.sa == null ? '–' : m.sa + '–' + m.sb}</span><span>${esc(pname(m.b[0]))} &amp; ${esc(pname(m.b[1]))}</span></button>`).join('')}
       ${r.bye.length ? `<div class="hb">Sat out: ${r.bye.map(p => esc(pname(p))).join(', ')}</div>` : ''}</div>`).reverse().join('');
-  layer.innerHTML = `<div class="ov" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="ht" data-act="noop">
+  layer.innerHTML = `<div class="ov" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="ht" data-act="noop" tabindex="-1">
     <h3 id="ht">Round history</h3><p class="lead">Tap a match to correct its score. Standings update immediately${S.mode === 'mexicano' ? '; pairings already made stay as they are' : ''}.</p>
     ${rounds}<div class="de"><span></span><button class="b2" data-act="close">Done</button></div></div></div>`;
+  const d = layer.querySelector('.dlg'); d.scrollTop = top; d.focus({ preventScroll: true });
 }
 
 /* ---------- events ---------- */
@@ -382,19 +410,20 @@ document.addEventListener('click', e => {
   const el = e.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act;
   if (a === 'noop') return;
-  if (a === 'close') { if (e.target.closest('[data-act]') === el) closeLayer(); return; }
+  if (!layer.innerHTML && app.contains(el)) opener = { ...el.dataset };
+  if (a === 'close') { dismiss(); return; }
   switch (a) {
     case 'mode': draft.mode = el.dataset.v; renderSetup(); break;
     case 'pts': draft.total = +el.dataset.v; renderSetup(); break;
     case 'cdec': draft.courts = Math.max(1, draft.courts - 1); renderSetup(); break;
     case 'cinc': draft.courts = Math.min(10, draft.courts + 1); renderSetup(); break;
-    case 'sample': draft.text = SAMPLE.split('\n').slice(0, Math.max(4, draft.courts * 4)).join('\n'); renderSetup(); break;
-    case 'back': draft = null; view = 'board'; render(); break;
-    case 'score': openScore(+el.dataset.r, +el.dataset.m); break;
+    case 'sample': draft.text = SAMPLE.split('\n').slice(0, sampleCount(draft.courts)).join('\n'); renderSetup(); break;
+    case 'back': draft = null; saveDraft(); view = 'board'; render(); break;
+    case 'score': openScore(+el.dataset.r, +el.dataset.m, layer.contains(el)); break;
     case 'pick': commit(+el.dataset.v); break;
     case 'clear': commit(null); break;
     case 'ok': { const cb = confirmCb; closeLayer(); cb && cb(); break; }
-    case 'next': if (S.rounds.at(-1).m.every(m => m.sa != null)) { makeRound(); save(); render(); } break;
+    case 'next': if (S.rounds.every(x => x.m.every(m => m.sa != null))) { makeRound(); save(); render(); } break;
     case 'menu': openMenu(el); break;
     case 'history': openHistory(); break;
     case 'undo': {
@@ -410,14 +439,34 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && layer.innerHTML) { closeLayer(); return; }
+  if (e.key === 'Escape' && layer.innerHTML) { dismiss(); return; }
+  if (e.key === 'Tab' && layer.innerHTML) {
+    // keep keyboard focus inside the open dialog or menu
+    const box = layer.querySelector('.dlg,.menu'), f = box ? [...box.querySelectorAll('button')] : [];
+    if (!f.length) return;
+    const ae = document.activeElement, first = f[0], last = f.at(-1);
+    if (!box.contains(ae) || ae === box) { if (e.shiftKey || ae !== box) { e.preventDefault(); (e.shiftKey ? last : first).focus(); } }
+    else if (e.shiftKey && ae === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && ae === last) { e.preventDefault(); first.focus(); }
+    return;
+  }
   if (!scoring) return;
   if (/^\d$/.test(e.key)) {
     scoring.buf = (scoring.buf + e.key).slice(-2);
     let v = +scoring.buf; if (v > S.total) { scoring.buf = e.key; v = +e.key; }
     scoring.v = v; drawScore();
   } else if (e.key === 'Backspace') { scoring.buf = scoring.buf.slice(0, -1); scoring.v = scoring.buf ? +scoring.buf : S.rounds[scoring.r].m[scoring.m].sa; drawScore(); }
-  else if (e.key === 'Enter' && scoring.v != null) { e.preventDefault(); commit(scoring.v); }
+  // Enter on a focused button (a number, Clear, Cancel) must do what that button says
+  else if (e.key === 'Enter' && scoring.v != null && !(e.target instanceof Element && e.target.closest('button'))) { e.preventDefault(); commit(scoring.v); }
+});
+
+// Another tab changed the tournament: pick up its state instead of overwriting it later
+window.addEventListener('storage', e => {
+  if (e.key !== KEY) return;
+  try { S = JSON.parse(e.newValue); if (!S || !S.rounds || !S.rounds.length) S = null; } catch (err) { S = null; }
+  layer.innerHTML = ''; scoring = null; confirmCb = null; opener = null;
+  if (!S) view = 'setup';
+  render();
 });
 
 render();
