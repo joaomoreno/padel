@@ -42,24 +42,28 @@ button{cursor:pointer}
 :focus-visible{outline:3px solid var(--ball);outline-offset:2px}
 .main{display:grid;grid-template-columns:minmax(0,1fr) clamp(330px,31vw,520px);gap:16px;padding:16px;min-height:0}
 .courts{--g:14px;--c:2;--r:1;display:flex;flex-wrap:wrap;gap:var(--g);align-content:stretch;justify-content:center;min-height:0}
-.court{width:calc((100% - (var(--c) - 1) * var(--g)) / var(--c));height:calc((100% - (var(--r) - 1) * var(--g)) / var(--r));container-type:size;position:relative;border:0;border-radius:12px;padding:0;background:radial-gradient(130% 100% at 50% 0%,#2f6ff2,var(--court) 55%,#1446b2);color:#fff;display:grid;grid-template-columns:1fr 1fr;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 8px 20px -10px rgba(10,30,90,.6);transition:transform .12s}
+.court{width:calc((100% - (var(--c) - 1) * var(--g)) / var(--c));height:calc((100% - (var(--r) - 1) * var(--g)) / var(--r));container-type:size;position:relative;border:0;border-radius:12px;padding:0;background:radial-gradient(130% 100% at 50% 0%,#2f6ff2,var(--court) 55%,#1446b2);color:#fff;display:grid;grid-template-columns:1fr 1fr;overflow:hidden;box-shadow:inset 0 1px 0 rgba(255,255,255,.25),0 8px 20px -10px rgba(10,30,90,.6);transition:transform .12s}
 .court:hover{transform:translateY(-2px)}
 .lines{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-.half{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:13cqh 5cqi 5cqh;gap:1cqh}
+.half{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:13cqh 5cqi 5cqh;gap:1cqh;border:0;background:transparent;color:inherit;transition:background .12s,box-shadow .12s}
+.half:hover,.half:focus-visible{background:rgba(255,255,255,.15);box-shadow:inset 0 0 0 3px rgba(215,242,60,.85)}
+.half:focus-visible{outline:none}
 .nm{font:600 min(13.5cqh,6.6cqi)/1.08 'Barlow Semi Condensed',sans-serif;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .scr{font:700 min(34cqh,15cqi)/1 'Barlow Condensed',sans-serif;margin-top:2cqh;font-variant-numeric:tabular-nums}
 .scr.win{color:var(--ball)}.scr.lose{opacity:.6}.scr.none{opacity:.35}
-.clab{position:absolute;top:4cqh;left:3cqi;font:700 min(8cqh,4cqi)/1 'Barlow Condensed',sans-serif;background:rgba(0,10,40,.35);padding:.28em .55em;border-radius:5px;display:flex;align-items:center;gap:.3em}
+.clab{position:absolute;top:4cqh;left:3cqi;z-index:1;pointer-events:none;font:700 min(8cqh,4cqi)/1 'Barlow Condensed',sans-serif;background:rgba(0,10,40,.35);padding:.28em .55em;border-radius:5px;display:flex;align-items:center;gap:.3em}
 .clab svg{width:1em;height:1em}
-.hint{position:absolute;top:4cqh;right:3cqi;font:700 min(7cqh,3.6cqi)/1 Barlow,sans-serif;background:var(--ball);color:var(--bink);padding:.35em .6em;border-radius:5px}
+.hint{position:absolute;top:4cqh;right:3cqi;z-index:1;pointer-events:none;font:700 min(7cqh,3.6cqi)/1 Barlow,sans-serif;background:var(--ball);color:var(--bink);padding:.35em .6em;border-radius:5px}
 .rank{display:flex;flex-direction:column;background:var(--panel);border-radius:12px;padding:14px 12px 8px;min-height:0}
 .rank h2{margin:0 4px 10px;font:700 26px/1 'Barlow Semi Condensed',sans-serif;display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .rank h2 small{font:500 14px Barlow,sans-serif;color:var(--mute)}
-.rh,.rr{display:grid;grid-template-columns:2.7em minmax(0,1fr) 2.7em 1.8em 2.6em 2.9em;align-items:center;gap:.35em;padding:0 .35em}
-.rh{font-size:13px;color:var(--mute);padding-bottom:6px;border-bottom:2px solid var(--line)}
+.rh,.rr{display:grid;grid-template-columns:2.7em minmax(0,1fr) 2.7em 1.8em 2.6em 2.9em;align-items:center;gap:.35em;padding:0 .35em;font-size:clamp(13px,min(calc(56cqh / var(--n)),4.4cqw),25px)}
+.rh{flex:none;color:var(--mute);padding-bottom:6px;border-bottom:2px solid var(--line)}
+.rh span{font-size:13px;line-height:1.2}
+.rh>:nth-child(3){text-align:center}
 .rh>:nth-child(n+4),.rr>:nth-child(n+4){text-align:right}
 .rl{flex:1;min-height:0;display:flex;flex-direction:column;container-type:size}
-.rr{flex:1 1 0;max-height:54px;font-size:clamp(13px,min(calc(56cqh / var(--n)),4.4cqw),25px);line-height:1.1;overflow:hidden;border-bottom:1px solid var(--line)}
+.rr{flex:1 1 0;max-height:54px;line-height:1.1;overflow:hidden;border-bottom:1px solid var(--line)}
 .pos{display:flex;align-items:center;gap:.2em}
 .pos b{font:700 1em/1 'Barlow Condensed',sans-serif;min-width:1.3em;text-align:center;border-radius:4px;padding:.12em 0}
 .rr.lead .pos b{background:var(--ball);color:var(--bink)}
@@ -105,12 +109,14 @@ textarea{width:100%;min-height:380px;resize:vertical;padding:12px 14px;border-ra
 .dlg h3{margin:0;font:700 30px/1.1 'Barlow Semi Condensed',sans-serif}
 .dlg .lead{margin:6px 0 0;color:var(--mute);font-size:17px}
 .vs{display:grid;grid-template-columns:1fr auto 1fr;gap:12px;align-items:stretch;margin:18px 0}
-.tm{background:var(--court);color:#fff;border-radius:10px;padding:12px 10px;text-align:center;font:600 21px/1.2 'Barlow Semi Condensed',sans-serif}
+.tm{background:var(--court);color:#fff;border:0;border-radius:10px;padding:12px 10px;text-align:center;font:600 21px/1.2 'Barlow Semi Condensed',sans-serif;transition:box-shadow .12s}
+.tm.act{box-shadow:0 0 0 3px var(--ball)}
 .tm .cn{display:block;font-size:56px;line-height:1;margin-top:6px}
 .tm.w .cn{color:var(--ball)}
 .vs i{align-self:center;font-style:normal;color:var(--mute);font-weight:700}
-.pad{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px}
-.pad button{height:54px;border-radius:8px;border:1px solid var(--line);background:var(--panel);font:700 24px/1 'Barlow Condensed',sans-serif}
+.pad{display:grid;grid-auto-flow:column;grid-template-rows:repeat(2,54px);grid-auto-columns:minmax(36px,1fr);gap:5px;overflow-x:auto;padding-bottom:2px}
+.pad button{height:54px;padding:0;border-radius:8px;border:1px solid var(--line);background:var(--panel);font:700 22px/1 'Barlow Condensed',sans-serif}
+.pad .tie{grid-row:1 / 3;height:auto}
 .pad button:hover{border-color:var(--court)}
 .pad button.on{background:var(--ball);color:var(--bink);border-color:var(--ball)}
 .padl{font-weight:600;margin-bottom:8px}
@@ -131,7 +137,7 @@ textarea{width:100%;min-height:380px;resize:vertical;padding:12px 14px;border-ra
   .main{grid-template-columns:1fr}
   .courts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
   .court{width:auto;height:auto;aspect-ratio:2/1}
-  .rl{container-type:normal}.rr{flex:none;min-height:42px;font-size:18px}
+  .rl{container-type:normal}.rh,.rr{font-size:18px}.rr{flex:none;min-height:42px}
   .ttl{max-width:60vw}.rnd{font-size:28px}
   .form{grid-template-columns:1fr}.form h1{font-size:34px}
 }
@@ -537,11 +543,11 @@ function renderBoard() {
   const st = standings(S.rounds), prev = R > 1 ? standings(S.rounds.slice(0, -1)) : null;
   const prevRank = {}; if (prev) prev.forEach(s => prevRank[s.i] = s.rank);
   const where = {}; r.m.forEach(m => [...m.a, ...m.b].forEach(p => where[p] = m.c + 1));
-  const half = (team, mine, theirs) => `<div class="half"><div class="nm">${esc(pname(team[0]))}</div><div class="nm">${esc(pname(team[1]))}</div>
-    <div class="scr ${mine == null ? 'none' : mine > theirs ? 'win' : mine < theirs ? 'lose' : ''}">${mine == null ? '–' : mine}</div></div>`;
-  const courts = r.m.map((m, k) => `<button class="court" data-act="score" data-r="${R - 1}" data-m="${k}" aria-label="Court ${m.c + 1}: enter score">
+  const half = (m, k, side, team, mine, theirs) => `<button type="button" class="half" data-act="score" data-r="${R - 1}" data-m="${k}" data-side="${side}" aria-label="Court ${m.c + 1}: enter score for ${esc(pname(team[0]))} &amp; ${esc(pname(team[1]))}"><div class="nm">${esc(pname(team[0]))}</div><div class="nm">${esc(pname(team[1]))}</div>
+    <div class="scr ${mine == null ? 'none' : mine > theirs ? 'win' : mine < theirs ? 'lose' : ''}">${mine == null ? '–' : mine}</div></button>`;
+  const courts = r.m.map((m, k) => `<div class="court" data-r="${R - 1}" data-m="${k}">
     ${LINES}<span class="clab">Court ${m.c + 1}${m.sa != null ? CHECK : ''}</span>${m.sa == null ? '<span class="hint">Tap to score</span>' : ''}
-    ${half(m.a, m.sa, m.sb)}${half(m.b, m.sb, m.sa)}</button>`).join('');
+    ${half(m, k, 0, m.a, m.sa, m.sb)}${half(m, k, 1, m.b, m.sb, m.sa)}</div>`).join('');
   const rows = st.map(s => {
     const mv = prev ? prevRank[s.i] - s.rank : 0;
     const c = where[s.i];
@@ -558,8 +564,7 @@ function renderBoard() {
     <button class="btn go" data-act="next" ${all ? '' : 'disabled'} title="${nextTitle}">Next round →</button></header>
   <main class="main"><section class="courts" aria-label="Courts">${courts}</section>
     <aside class="rank" aria-label="Standings"><h2>Standings <small>${r.bye.length ? `Out this round: ${r.bye.map(p => esc(pname(p))).join(', ')}` : done ? 'Includes this round' : `After round ${R - 1}`}</small></h2>
-      <div class="rh"><span>#</span><span>Player</span><span>Court</span><span>W</span><span>+/−</span><span>Pts</span></div>
-      <div class="rl" style="--n:${Math.max(st.length, 8)}">${rows}</div></aside></main></div>`;
+      <div class="rl" style="--n:${Math.max(st.length, 8)}"><div class="rh"><span>#</span><span>Player</span><span>Court</span><span>W</span><span>+/−</span><span>Pts</span></div>${rows}</div></aside></main></div>`;
   if (ro) ro.disconnect();
   ro = new ResizeObserver(fit); ro.observe(app.querySelector('.courts'));
   fit();
@@ -579,8 +584,7 @@ function renderFinal() {
     <button class="btn go" data-act="share">Copy link</button></header>
   <main class="final-main"><section class="rank" aria-label="Final standings">
     <h2>Final standings <small>After ${R} round${R === 1 ? '' : 's'}</small></h2>
-    <div class="rh"><span>#</span><span>Player</span><span>W</span><span>+/−</span><span>Pts</span></div>
-    <div class="rl" style="--n:${Math.max(rows.length, 8)}">${rowHtml}</div></section></main></div>`;
+    <div class="rl" style="--n:${Math.max(rows.length, 8)}"><div class="rh"><span>#</span><span>Player</span><span>W</span><span>+/−</span><span>Pts</span></div>${rowHtml}</div></section></main></div>`;
 }
 
 function render() {
@@ -599,26 +603,47 @@ function ask(title, msg, ok, cb) {
   layer.querySelector('[data-act=ok]').focus();
 }
 
-function openScore(ri, mi, fromHistory) {
+function openScore(ri, mi, fromHistory, side = 0) {
   const m = S.rounds[ri].m[mi];
   const hist = fromHistory ? layer.querySelector('.dlg')?.scrollTop || 0 : null;
-  scoring = { r: ri, m: mi, v: m.sa, buf: '', hist };
+  scoring = { r: ri, m: mi, side, v: side ? m.sb : m.sa, buf: '', hist };
   drawScore();
 }
 function drawScore() {
-  const { r, m: mi, v } = scoring, m = S.rounds[r].m[mi], T = S.total;
-  const b = v == null ? null : T - v, team = (t, s, o) => `<div class="tm${s != null && s > o ? ' w' : ''}">${esc(pname(t[0]))}<br>${esc(pname(t[1]))}<span class="cn">${s == null ? '–' : s}</span></div>`;
+  const { r, m: mi, side, v } = scoring, m = S.rounds[r].m[mi], T = S.total;
+  const sa = v == null ? null : side ? T - v : v, sb = v == null ? null : side ? v : T - v;
+  const active = side ? m.b : m.a;
+  const team = (t, s, o, idx) => `<button type="button" class="tm${s != null && s > o ? ' w' : ''}${side === idx ? ' act' : ''}" data-act="side" data-v="${idx}">${esc(pname(t[0]))}<br>${esc(pname(t[1]))}<span class="cn">${s == null ? '–' : s}</span></button>`;
+  const padBtns = [];
+  if (T % 2 === 0) {
+    const mid = T / 2;
+    padBtns.push(`<button class="tie${mid === v ? ' on' : ''}" data-act="pick" data-v="${mid}">${mid}</button>`);
+    for (let k = 1; k <= mid; k++) {
+      const lo = mid - k, hi = mid + k;
+      padBtns.push(`<button data-act="pick" data-v="${lo}" class="${lo === v ? ' on' : ''}">${lo}</button>`);
+      padBtns.push(`<button data-act="pick" data-v="${hi}" class="${hi === v ? ' on' : ''}">${hi}</button>`);
+    }
+  } else {
+    const lo0 = (T - 1) / 2, hi0 = lo0 + 1;
+    for (let k = 0; k <= lo0; k++) {
+      const lo = lo0 - k, hi = hi0 + k;
+      padBtns.push(`<button data-act="pick" data-v="${lo}" class="${lo === v ? ' on' : ''}">${lo}</button>`);
+      padBtns.push(`<button data-act="pick" data-v="${hi}" class="${hi === v ? ' on' : ''}">${hi}</button>`);
+    }
+  }
   layer.innerHTML = `<div class="ov" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="st" data-act="noop" tabindex="-1">
-    <h3 id="st">Court ${m.c + 1} · Round ${r + 1}</h3><p class="lead">Pick the left team’s points — the other side fills in to ${T}. Or type a number and press Enter.</p>
-    <div class="vs">${team(m.a, v, b)}<i>vs</i>${team(m.b, b, v)}</div>
-    <div class="padl">Points for ${esc(pname(m.a[0]))} &amp; ${esc(pname(m.a[1]))}</div>
-    <div class="pad">${Array.from({ length: T + 1 }, (_, i) => `<button data-act="pick" data-v="${i}" class="${i === v ? 'on' : ''}">${i}</button>`).join('')}</div>
+    <h3 id="st">Court ${m.c + 1} · Round ${r + 1}</h3><p class="lead">Pick the ${side ? 'right' : 'left'} team’s points — the other side fills in to ${T}. Or type a number and press Enter.</p>
+    <div class="vs">${team(m.a, sa, sb, 0)}<i>vs</i>${team(m.b, sb, sa, 1)}</div>
+    <div class="padl">Points for ${esc(pname(active[0]))} &amp; ${esc(pname(active[1]))}</div>
+    <div class="pad">${padBtns.join('')}</div>
     <div class="de"><span>${m.sa != null ? '<button class="b2 dng" data-act="clear">Clear result</button>' : ''}</span><button class="b2" data-act="close">Cancel</button></div></div></div>`;
   layer.querySelector('.dlg').focus();
 }
 function commit(v) {
   const m = S.rounds[scoring.r].m[scoring.m];
-  m.sa = v; m.sb = v == null ? null : S.total - v;
+  if (v == null) { m.sa = null; m.sb = null; }
+  else if (scoring.side) { m.sb = v; m.sa = S.total - v; }
+  else { m.sa = v; m.sb = S.total - v; }
   save();
   if (scoring.hist != null) { const top = scoring.hist; render(); scoring = null; openHistory(top); }
   else { closeLayer(); render(); }
@@ -670,7 +695,8 @@ document.addEventListener('click', e => {
     case 'cinc': draft.courts = Math.min(10, draft.courts + 1); renderSetup(); break;
     case 'sample': draft.text = SAMPLE.split('\n').slice(0, sampleCount(draft.courts)).join('\n'); renderSetup(); break;
     case 'back': draft = null; saveDraft(); view = 'board'; render(); break;
-    case 'score': openScore(+el.dataset.r, +el.dataset.m, layer.contains(el)); break;
+    case 'score': openScore(+el.dataset.r, +el.dataset.m, layer.contains(el), +(el.dataset.side || 0)); break;
+    case 'side': if (scoring && scoring.side !== +el.dataset.v) { scoring.side = +el.dataset.v; scoring.v = scoring.v == null ? null : S.total - scoring.v; scoring.buf = ''; drawScore(); } break;
     case 'pick': commit(+el.dataset.v); break;
     case 'clear': commit(null); break;
     case 'ok': { const cb = confirmCb; closeLayer(); cb && cb(); break; }
@@ -736,7 +762,7 @@ document.addEventListener('keydown', e => {
     scoring.buf = (scoring.buf + e.key).slice(-2);
     let v = +scoring.buf; if (v > S.total) { scoring.buf = e.key; v = +e.key; }
     scoring.v = v; drawScore();
-  } else if (e.key === 'Backspace') { scoring.buf = scoring.buf.slice(0, -1); scoring.v = scoring.buf ? +scoring.buf : S.rounds[scoring.r].m[scoring.m].sa; drawScore(); }
+  } else if (e.key === 'Backspace') { const cur = scoring.side ? S.rounds[scoring.r].m[scoring.m].sb : S.rounds[scoring.r].m[scoring.m].sa; scoring.buf = scoring.buf.slice(0, -1); scoring.v = scoring.buf ? +scoring.buf : cur; drawScore(); }
   // Enter on a focused button (a number, Clear, Cancel) must do what that button says
   else if (e.key === 'Enter' && scoring.v != null && !(e.target instanceof Element && e.target.closest('button'))) { e.preventDefault(); commit(scoring.v); }
 });

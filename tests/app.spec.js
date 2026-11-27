@@ -35,7 +35,7 @@ async function start(page, { names = NAMES18, points = 24, mode = 'americano', c
 async function finishRound(page, v = 10) {
   const vals = await page.evaluate(() => [...document.querySelectorAll('.court')].map((c, i) => c.querySelector('.hint') ? i : -1).filter(i => i >= 0));
   for (const i of vals) {
-    await page.locator('.court').nth(i).click();
+    await page.locator('.court').nth(i).locator('.half[data-side="0"]').click();
     await page.click(`[data-act=pick][data-v="${typeof v === 'function' ? v(i) : v}"]`);
   }
 }
@@ -117,20 +117,78 @@ test.describe('setup', () => {
 test.describe('score dialog', () => {
   test('typing a score and pressing Enter saves it and refocuses the court', async ({ page }) => {
     await start(page, { points: 21 });
-    await page.locator('.court').first().click();
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
     await page.keyboard.press('1');
     await page.keyboard.press('5');
     await page.keyboard.press('Enter');
     const m = (await state(page)).rounds[0].m[0];
     expect([m.sa, m.sb]).toEqual([15, 6]);
-    await expect(page.locator('.court[data-m="0"]')).toBeFocused();
+    await expect(page.locator('.half[data-m="0"][data-side="0"]')).toBeFocused();
+  });
+
+  test('clicking the right side of a court enters that side\'s score and shows hover feedback', async ({ page }) => {
+    await start(page, { points: 21 });
+    const left = page.locator('.court[data-m="0"] .half[data-side="0"]');
+    const right = page.locator('.court[data-m="0"] .half[data-side="1"]');
+    await right.hover();
+    await expect.poll(() => page.evaluate(() =>
+      getComputedStyle(document.querySelector('.court[data-m="0"] .half[data-side="1"]')).backgroundColor
+    )).not.toBe('rgba(0, 0, 0, 0)');
+    expect(await page.evaluate(() =>
+      getComputedStyle(document.querySelector('.court[data-m="0"] .half[data-side="0"]')).backgroundColor
+    )).toBe('rgba(0, 0, 0, 0)');
+
+    const S0 = await state(page);
+    const rightTeam = S0.rounds[0].m[0].b.map(i => S0.players[i]);
+    await right.click();
+    await expect(page.locator('.padl')).toContainText(`${rightTeam[0]} & ${rightTeam[1]}`);
+    await page.click('[data-act=pick][data-v="15"]');
+    const m = (await state(page)).rounds[0].m[0];
+    expect([m.sa, m.sb]).toEqual([6, 15]);
+    await expect(right).toBeFocused();
+  });
+
+  test('score pad aligns complementary score pairs vertically (10/11, 9/12, ...)', async ({ page }) => {
+    await start(page, { points: 21 });
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
+    const pos21 = await page.evaluate(() => Object.fromEntries(
+      [...document.querySelectorAll('.pad [data-act=pick]')].map(b => {
+        const r = b.getBoundingClientRect();
+        return [b.dataset.v, { x: Math.round(r.left), y: Math.round(r.top) }];
+      })
+    ));
+    // 10/11 in first column, 9/12 in second, ..., 0/21 in last
+    for (let k = 0; k <= 10; k++) {
+      const lo = 10 - k, hi = 11 + k;
+      expect(pos21[lo].x).toBe(pos21[hi].x);
+      expect(pos21[lo].y).toBeLessThan(pos21[hi].y);
+      if (k > 0) expect(pos21[lo].x).toBeGreaterThan(pos21[lo + 1].x);
+    }
+
+    // Even total (24): 12 alone first, then 11/13, 10/14, ..., 0/24
+    await page.evaluate(() => localStorage.clear());
+    await start(page, { points: 24 });
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
+    const pos24 = await page.evaluate(() => Object.fromEntries(
+      [...document.querySelectorAll('.pad [data-act=pick]')].map(b => {
+        const r = b.getBoundingClientRect();
+        return [b.dataset.v, { x: Math.round(r.left), y: Math.round(r.top) }];
+      })
+    ));
+    expect(pos24[12].x).toBeLessThan(pos24[11].x);
+    for (let k = 1; k <= 12; k++) {
+      const lo = 12 - k, hi = 12 + k;
+      expect(pos24[lo].x).toBe(pos24[hi].x);
+      expect(pos24[lo].y).toBeLessThan(pos24[hi].y);
+      if (k > 1) expect(pos24[lo].x).toBeGreaterThan(pos24[lo + 1].x);
+    }
   });
 
   test('Enter on a focused number saves that number, not the previous score', async ({ page }) => {
     await start(page);
-    await page.locator('.court').first().click();
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
     await page.click('[data-act=pick][data-v="15"]');
-    await page.locator('.court').first().click();
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
     await page.focus('[data-act=pick][data-v="7"]');
     await page.keyboard.press('Enter');
     expect((await state(page)).rounds[0].m[0].sa).toBe(7);
@@ -138,9 +196,9 @@ test.describe('score dialog', () => {
 
   test('Enter on a focused "Clear result" clears the score', async ({ page }) => {
     await start(page);
-    await page.locator('.court').first().click();
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
     await page.click('[data-act=pick][data-v="15"]');
-    await page.locator('.court').first().click();
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
     await page.focus('[data-act=clear]');
     await page.keyboard.press('Enter');
     expect((await state(page)).rounds[0].m[0].sa).toBeNull();
@@ -148,7 +206,7 @@ test.describe('score dialog', () => {
 
   test('Enter on a focused Cancel does not save', async ({ page }) => {
     await start(page);
-    await page.locator('.court').first().click();
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
     await page.keyboard.press('9');
     await page.focus('.dlg [data-act=close]');
     await page.keyboard.press('Enter');
@@ -157,20 +215,20 @@ test.describe('score dialog', () => {
 
   test('number buttons cover 0 to the points total', async ({ page }) => {
     await start(page, { points: 32 });
-    await page.locator('.court').first().click();
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
     await expect(page.locator('[data-act=pick]')).toHaveCount(33);
   });
 
   test('Tab keeps focus inside the dialog; Escape closes and refocuses the court', async ({ page }) => {
     await start(page);
-    await page.locator('.court').nth(1).click();
+    await page.locator('.court').nth(1).locator('.half[data-side="0"]').click();
     for (let i = 0; i < 40; i++) {
       await page.keyboard.press(i % 7 ? 'Tab' : 'Shift+Tab');
       expect(await page.evaluate(() => !!document.activeElement.closest('#layer'))).toBe(true);
     }
     await page.keyboard.press('Escape');
     await expect(page.locator('#layer')).toBeEmpty();
-    await expect(page.locator('.court[data-m="1"]')).toBeFocused();
+    await expect(page.locator('.half[data-m="1"][data-side="0"]')).toBeFocused();
   });
 });
 
@@ -299,10 +357,10 @@ test.describe('two tabs', () => {
     await start(page);
     const other = await context.newPage();
     await other.goto(URL);
-    await other.locator('.court').nth(1).click();
+    await other.locator('.court').nth(1).locator('.half[data-side="0"]').click();
     await other.click('[data-act=pick][data-v="20"]');
     await expect(page.locator('.court[data-m="1"] .scr').first()).toHaveText('20');
-    await page.locator('.court').first().click();
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
     await page.click('[data-act=pick][data-v="5"]');
     const sas = (await state(page)).rounds[0].m.map(m => m.sa);
     expect(sas.slice(0, 2)).toEqual([5, 20]);
@@ -315,6 +373,30 @@ test.describe('layout', () => {
     const cut = await page.evaluate(() => [...document.querySelectorAll('.rr .pn')]
       .filter(e => e.textContent.length <= 6 && e.scrollWidth > e.clientWidth).map(e => e.textContent));
     expect(cut).toEqual([]);
+  });
+
+  test('standings header columns align with row columns on board and final view', async ({ page }) => {
+    await start(page);
+    const checkAlign = () => page.evaluate(() => {
+      const h = [...document.querySelectorAll('.rh > *')].map(e => e.getBoundingClientRect());
+      const r = [...document.querySelector('.rr').children].map(e => e.getBoundingClientRect());
+      return h.map((hb, i) => ({
+        dl: Math.abs(hb.left - r[i].left),
+        dr: Math.abs(hb.right - r[i].right),
+      }));
+    });
+    for (const d of await checkAlign()) {
+      expect(d.dl).toBeLessThanOrEqual(1);
+      expect(d.dr).toBeLessThanOrEqual(1);
+    }
+    await finishRound(page);
+    await page.click('[data-act=menu]');
+    await page.click('[data-act=end]');
+    await page.click('[data-act=ok]');
+    for (const d of await checkAlign()) {
+      expect(d.dl).toBeLessThanOrEqual(1);
+      expect(d.dr).toBeLessThanOrEqual(1);
+    }
   });
 
   test('no horizontal overflow on a phone', async ({ page }) => {
