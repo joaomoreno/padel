@@ -3,6 +3,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('fs');
 const path = require('path');
+const zlib = require('zlib');
 
 const HTML = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const URL = 'http://padel.test/';
@@ -15,8 +16,53 @@ test.beforeEach(async ({ context }) => {
     : r.abort());
 });
 
+/** Decode tournament state directly from the page's URL fragment. */
+function decodeUrlHash(h) {
+  if (!h || h[0] !== '#' || !'1234'.includes(h[1])) return null;
+  const u8 = Buffer.from(h.slice(2), 'base64url');
+  const TOTALS = [16, 21, 24, 32];
+  let i = 0;
+  const rVar = () => { let n = 0, s = 0; for (;;) { const b = u8[i++]; n |= (b & 127) << s; if (b < 128) return n >>> 0; s += 7; } };
+  const isFin = h[1] === '3' || h[1] === '4', isComp = h[1] === '2' || h[1] === '4';
+  const flags = u8[i++], mode = (flags & 1) ? 'mexicano' : 'americano';
+  const total = (flags & 8) ? rVar() : TOTALS[(flags >> 1) & 3];
+  const courts = isFin ? 0 : (((flags >> 4) & 15) === 15 ? rVar() : ((flags >> 4) & 15) + 1);
+  const tLen = rVar(), rawText = u8.subarray(i, i + tLen); i += tLen;
+  const str = (isComp ? zlib.inflateRawSync(rawText) : rawText).toString('utf8');
+  const sep = str.indexOf('\0'), defName = mode === 'mexicano' ? 'Padel Mexicano' : 'Padel Americano';
+  const name = str.slice(0, sep) || defName, players = str.slice(sep + 1).split('\n'), n = players.length;
+  if (isFin) {
+    const hasHalf = !!(flags & 16), diffImplicit = !!(flags & 32);
+    const R = rVar(), pts0 = rVar(), maxDelta = rVar();
+    let minDiff = 0, diffSpan = 0;
+    if (!diffImplicit) { const zz = rVar(); minDiff = (zz & 1) ? -((zz + 1) / 2) : zz / 2; diffSpan = rVar(); }
+    let big = 0n; for (let k = u8.length - 1; k >= i; k--) big = (big << 8n) | BigInt(u8[k]);
+    const take = b => { const bb = BigInt(b), v = Number(big % bb); big /= bb; return v; };
+    const ptsU = [pts0]; for (let k = 1; k < n; k++) ptsU.push(ptsU[k - 1] - take(maxDelta + 1));
+    const ws = Array.from({ length: n }, () => take(R + 1));
+    const diffs = diffImplicit ? ptsU.map(u => (hasHalf ? u : 2 * u) - R * total) : Array.from({ length: n }, () => minDiff + take(diffSpan + 1));
+    const rows = players.map((nm, k) => ({ nm, pts: hasHalf ? ptsU[k] / 2 : ptsU[k], w: ws[k], diff: diffs[k] }));
+    rows.forEach((s, k) => { const p = rows[k - 1]; s.rank = k && p.pts === s.pts && p.w === s.w && p.diff === s.diff ? p.rank : k + 1; });
+    return { name, mode, total, courts: Math.min(10, Math.floor(n / 4)), players, final: { rounds: R, rows } };
+  }
+  const R = rVar(), nc = Math.min(courts, Math.floor(n / 4));
+  let big = 0n; for (let k = u8.length - 1; k >= i; k--) big = (big << 8n) | BigInt(u8[k]);
+  const take = b => { const bb = BigInt(b), v = Number(big % bb); big /= bb; return v; };
+  const rounds = [];
+  for (let ri = 0; ri < R; ri++) {
+    const pool = Array.from({ length: n }, (_, k) => k), m = [];
+    for (let c = 0; c < nc; c++) {
+      const p = []; for (let k = 0; k < 4; k++) p.push(pool.splice(take(pool.length), 1)[0]);
+      const sv = take(total + 2), sa = sv === 0 ? null : sv - 1;
+      m.push({ c, a: [p[0], p[1]], b: [p[2], p[3]], sa, sb: sa == null ? null : total - sa });
+    }
+    rounds.push({ m, bye: pool });
+  }
+  return { name, mode, total, courts, players, rounds };
+}
+
 /** @param {import('@playwright/test').Page} page */
-const state = page => page.evaluate(() => JSON.parse(localStorage.getItem('padel-tourney-v1') || 'null'));
+const state = async page => decodeUrlHash(await page.evaluate(() => location.hash));
 
 /** Start a tournament through the setup form. */
 async function start(page, { names = NAMES18, points = 24, mode = 'americano', courts = 4, name = 'Friday' } = {}) {
@@ -86,18 +132,15 @@ test.describe('setup', () => {
     expect(await state(page)).toBeNull();
   });
 
-  test('unsaved setup survives a reload and is cleared once started', async ({ page }) => {
-    await page.goto(URL);
-    await page.fill('#tn', 'Draft test');
-    await page.fill('#pl', 'Ana\nBruno');
-    await page.reload();
-    await expect(page.locator('#tn')).toHaveValue('Draft test');
-    await expect(page.locator('#pl')).toHaveValue('Ana\nBruno');
-    await page.fill('#pl', 'Ana\nBruno\nCarla\nDiego');
-    await page.click('button[type=submit]');
-    expect(await page.evaluate(() => localStorage.getItem('padel-draft-v1'))).toBeNull();
+  test('active tournament survives a reload via the URL fragment without localStorage', async ({ page }) => {
+    await start(page, { name: 'Reload test', names: ['Ana', 'Bruno', 'Carla', 'Diego'], courts: 1 });
+    await page.locator('.court').first().locator('.half[data-side="0"]').click();
+    await page.click('[data-act=pick][data-v="15"]');
+    expect(await page.evaluate(() => localStorage.length)).toBe(0);
     await page.reload();
     await expect(page.locator('.rnd')).toHaveText('Round 1');
+    await expect(page.locator('.court .scr').first()).toHaveText('15');
+    expect(await page.evaluate(() => localStorage.length)).toBe(0);
   });
 
   test('page title follows the event and round', async ({ page }) => {
@@ -166,7 +209,6 @@ test.describe('score dialog', () => {
     }
 
     // Even total (24): 12 alone first, then 11/13, 10/14, ..., 0/24
-    await page.evaluate(() => localStorage.clear());
     await start(page, { points: 24 });
     await page.locator('.court').first().locator('.half[data-side="0"]').click();
     const pos24 = await page.evaluate(() => Object.fromEntries(
@@ -353,17 +395,16 @@ test.describe('round history', () => {
 });
 
 test.describe('two tabs', () => {
-  test('results entered in another tab are not overwritten', async ({ page, context }) => {
-    await start(page);
+  test('two tabs can hold independent tournaments without interfering', async ({ page, context }) => {
+    await start(page, { name: 'Tab A', names: NAMES18.slice(0, 8), courts: 2 });
     const other = await context.newPage();
-    await other.goto(URL);
-    await other.locator('.court').nth(1).locator('.half[data-side="0"]').click();
+    await start(other, { name: 'Tab B', names: NAMES18.slice(8, 16), courts: 2 });
+    await other.locator('.court').first().locator('.half[data-side="0"]').click();
     await other.click('[data-act=pick][data-v="20"]');
-    await expect(page.locator('.court[data-m="1"] .scr').first()).toHaveText('20');
-    await page.locator('.court').first().locator('.half[data-side="0"]').click();
-    await page.click('[data-act=pick][data-v="5"]');
-    const sas = (await state(page)).rounds[0].m.map(m => m.sa);
-    expect(sas.slice(0, 2)).toEqual([5, 20]);
+    await expect(page.locator('.top .ttl')).toHaveText('Tab A');
+    await expect(page.locator('.court .scr').first()).toHaveText('–');
+    await expect(other.locator('.top .ttl')).toHaveText('Tab B');
+    await expect(other.locator('.court .scr').first()).toHaveText('20');
   });
 });
 
@@ -476,26 +517,6 @@ test.describe('URL fragment sharing', () => {
     await freshCtx.close();
   });
 
-  test('shared URL takes precedence over existing localStorage and draft', async ({ page, browser }) => {
-    await start(page, { name: 'First' });
-    const urlA = page.url();
-
-    const ctx2 = await browser.newContext();
-    await ctx2.route('**/*', r => r.request().url().startsWith(URL)
-      ? r.fulfill({ status: 200, contentType: 'text/html', body: HTML })
-      : r.abort());
-    const other = await ctx2.newPage();
-    await start(other, { name: 'Second', names: NAMES18.slice(0, 8), courts: 2 });
-    await other.click('[data-act=menu]');
-    await other.click('[data-act=new]');
-    await other.fill('#tn', 'Unsaved draft');
-
-    await other.goto(urlA);
-    await expect(other.locator('.top .ttl')).toHaveText('First');
-    await expect(other.locator('.rnd')).toHaveText('Round 1');
-    await ctx2.close();
-  });
-
   test('corrupt or unknown URL hashes fall back cleanly without errors', async ({ page }) => {
     const errors = [];
     page.on('pageerror', e => errors.push(String(e)));
@@ -533,7 +554,7 @@ test.describe('URL fragment sharing', () => {
 
     await expect.poll(() => page.evaluate(() => location.hash)).toMatch(/^#2[A-Za-z0-9_-]+$/);
     const hash = await page.evaluate(() => location.hash);
-    const jsonLen = await page.evaluate(() => localStorage.getItem('padel-tourney-v1').length);
+    const jsonLen = JSON.stringify(await state(page)).length;
     expect(hash.length).toBeLessThan(350);
     expect(hash.length).toBeLessThan(jsonLen / 4);
   });

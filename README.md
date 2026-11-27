@@ -1,6 +1,6 @@
 # Padel tournament
 
-A single-page Americano / Mexicano tournament app: everything lives in `index.html`, and state is kept in `localStorage` and the URL fragment for sharing. Live at https://padel.joaomoreno.com/.
+A single-page Americano / Mexicano tournament app: everything lives in `index.html`, and state is kept in the URL fragment for sharing. Live at https://padel.joaomoreno.com/.
 
 ## Tests
 
