@@ -149,7 +149,6 @@ textarea{width:100%;min-height:380px;resize:vertical;padding:12px 14px;border-ra
 <div id="layer"></div>
 <script>
 {
-const KEY = 'padel-tourney-v1';
 const BALL = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="18" fill="#d7f23c"/><path d="M6 9c8 4 8 18 0 22M34 9c-8 4-8 18 0 22" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>';
 const LINES = '<svg class="lines" viewBox="0 0 200 100" preserveAspectRatio="none" aria-hidden="true"><g fill="none" stroke="#fff" vector-effect="non-scaling-stroke"><rect x="4" y="5" width="192" height="90" stroke-opacity=".45" stroke-width="2" vector-effect="non-scaling-stroke"/><path d="M36 5V95M164 5V95M36 50H164" stroke-opacity=".3" stroke-width="1.5" vector-effect="non-scaling-stroke"/><path d="M100 2V98" stroke-opacity=".85" stroke-width="3" stroke-dasharray="1 2" vector-effect="non-scaling-stroke"/></g></svg>';
 const CHECK = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="#d7f23c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -382,20 +381,8 @@ async function bestUrl() {
   return location.href;
 }
 
-const isValidState = s => !!(s && ((s.rounds && s.rounds.length) || (s.final && s.final.rows && s.final.rows.length >= 4)));
-let S = null;
-const saveLocal = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
-const save = () => { saveLocal(); syncHash(); };
-const DKEY = 'padel-draft-v1';
-const saveDraft = () => { try { draft ? localStorage.setItem(DKEY, JSON.stringify(draft)) : localStorage.removeItem(DKEY); } catch (e) {} };
-
-let draft = null;
-function loadLocal() {
-  try { S = JSON.parse(localStorage.getItem(KEY)); if (!isValidState(S)) S = null; } catch (e) { S = null; }
-  try { draft = JSON.parse(localStorage.getItem(DKEY)); if (!draft || typeof draft.text !== 'string') draft = null; } catch (e) { draft = null; }
-  view = S && !draft ? 'board' : 'setup';
-}
-let view = 'setup';
+let S = null, draft = null, view = 'setup';
+const save = syncHash;
 let scoring = null, confirmCb = null, opener = null;
 const pname = i => S.players[i];
 
@@ -505,9 +492,8 @@ function renderSetup() {
     </div>
   </form></div>`;
   const pl = document.getElementById('pl');
-  pl.addEventListener('input', () => { draft.text = pl.value; saveDraft(); document.getElementById('sum').innerHTML = summaryHTML(); });
-  document.getElementById('tn').addEventListener('input', e => { draft.name = e.target.value; saveDraft(); });
-  saveDraft();
+  pl.addEventListener('input', () => { draft.text = pl.value; document.getElementById('sum').innerHTML = summaryHTML(); });
+  document.getElementById('tn').addEventListener('input', e => { draft.name = e.target.value; });
   document.getElementById('sf').addEventListener('submit', e => { e.preventDefault(); start(); });
 }
 
@@ -516,7 +502,7 @@ function start() {
   if (names.length < 4 || new Set(lower).size !== names.length) { document.getElementById('pl').focus(); return; }
   const go = () => {
     S = { name: draft.name.trim() || (draft.mode === 'mexicano' ? 'Padel Mexicano' : 'Padel Americano'), mode: draft.mode, total: draft.total, courts: draft.courts, players: names, rounds: [] };
-    makeRound(); save(); draft = null; saveDraft(); view = 'board'; render();
+    makeRound(); save(); draft = null; view = 'board'; render();
   };
   if (S) ask('Start a new tournament?', `“${esc(S.name)}” — ${S.final ? `final standings for ${S.players.length} players` : `${S.rounds.length} round${S.rounds.length > 1 ? 's' : ''} with ${S.players.length} players`} — will be deleted. This can’t be undone.`, 'Delete and start', go);
   else go();
@@ -694,7 +680,7 @@ document.addEventListener('click', e => {
     case 'cdec': draft.courts = Math.max(1, draft.courts - 1); renderSetup(); break;
     case 'cinc': draft.courts = Math.min(10, draft.courts + 1); renderSetup(); break;
     case 'sample': draft.text = SAMPLE.split('\n').slice(0, sampleCount(draft.courts)).join('\n'); renderSetup(); break;
-    case 'back': draft = null; saveDraft(); view = 'board'; render(); break;
+    case 'back': draft = null; view = 'board'; render(); break;
     case 'score': openScore(+el.dataset.r, +el.dataset.m, layer.contains(el), +(el.dataset.side || 0)); break;
     case 'side': if (scoring && scoring.side !== +el.dataset.v) { scoring.side = +el.dataset.v; scoring.v = scoring.v == null ? null : S.total - scoring.v; scoring.buf = ''; drawScore(); } break;
     case 'pick': commit(+el.dataset.v); break;
@@ -767,27 +753,15 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Enter' && scoring.v != null && !(e.target instanceof Element && e.target.closest('button'))) { e.preventDefault(); commit(scoring.v); }
 });
 
-// Another tab changed the tournament: pick up its state instead of overwriting it later
-window.addEventListener('storage', e => {
-  if (e.key !== KEY) return;
-  try { S = JSON.parse(e.newValue); if (!isValidState(S)) S = null; } catch (err) { S = null; }
-  layer.innerHTML = ''; scoring = null; confirmCb = null; opener = null;
-  if (!S) view = 'setup';
-  syncHash();
-  render();
-});
-
 window.addEventListener('hashchange', async () => {
   const decoded = await decodeHash(location.hash);
-  if (!decoded) return;
-  S = decoded; draft = null; saveDraft(); saveLocal();
   layer.innerHTML = ''; scoring = null; confirmCb = null; opener = null;
-  view = 'board'; render();
+  if (decoded) { S = decoded; draft = null; view = 'board'; render(); }
+  else if (!location.hash) { S = null; draft = null; view = 'setup'; render(); }
 });
 
 const applyDecoded = decoded => {
-  if (decoded) { S = decoded; draft = null; saveDraft(); saveLocal(); view = 'board'; render(); }
-  else { loadLocal(); render(); if (S && view === 'board') syncHash(); }
+  S = decoded; draft = null; view = S ? 'board' : 'setup'; render();
 };
 if (location.hash.startsWith('#2') || location.hash.startsWith('#4')) decodeHash(location.hash).then(applyDecoded);
 else applyDecoded(decodeHashSync(location.hash));
