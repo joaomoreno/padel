@@ -152,15 +152,163 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>'
 const fmt = n => Number.isInteger(n) ? String(n) : n.toFixed(1);
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
+/* ---------- URL state ---------- */
+const TOTALS = [16, 21, 24, 32];
+const te = new TextEncoder(), td = new TextDecoder();
+const toB64u = u8 => {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const fromB64u = s => {
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - s.length % 4) % 4));
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+};
+const wVar = (out, n) => { while (n >= 128) { out.push((n & 127) | 128); n >>>= 7; } out.push(n); };
+const rVar = (u8, st) => {
+  let n = 0, s = 0;
+  for (;;) {
+    if (st.i >= u8.length) throw 0;
+    const b = u8[st.i++];
+    n |= (b & 127) << s;
+    if (b < 128) return n >>> 0;
+    if ((s += 7) > 28) throw 0;
+  }
+};
+const pipeStream = (u8, Stream) => new Response(new Blob([u8]).stream().pipeThrough(new Stream('deflate-raw'))).arrayBuffer().then(b => new Uint8Array(b));
+
+function packParts(state) {
+  const head = [], ti = TOTALS.indexOf(state.total), customT = ti === -1, customC = state.courts < 1 || state.courts > 15;
+  head.push((state.mode === 'mexicano' ? 1 : 0) | ((customT ? 0 : ti) << 1) | (customT ? 8 : 0) | ((customC ? 15 : state.courts - 1) << 4));
+  if (customT) wVar(head, state.total);
+  if (customC) wVar(head, state.courts);
+  const defName = state.mode === 'mexicano' ? 'Padel Mexicano' : 'Padel Americano';
+  const text = te.encode((state.name === defName ? '' : state.name.replace(/\0/g, '')) + '\0' + state.players.join('\n'));
+  const tail = [], n = state.players.length, digits = [], scoreBase = state.total + 2;
+  wVar(tail, state.rounds.length);
+  for (const r of state.rounds) {
+    const pool = Array.from({ length: n }, (_, i) => i);
+    for (const m of r.m) {
+      for (const p of [m.a[0], m.a[1], m.b[0], m.b[1]]) {
+        const idx = pool.indexOf(p);
+        digits.push(idx, pool.length);
+        pool.splice(idx, 1);
+      }
+      digits.push(m.sa == null ? 0 : m.sa + 1, scoreBase);
+    }
+  }
+  let big = 0n;
+  for (let i = digits.length - 1; i >= 0; i -= 2) big = big * BigInt(digits[i]) + BigInt(digits[i - 1]);
+  while (big > 0n) { tail.push(Number(big & 255n)); big >>= 8n; }
+  return { head, text, tail };
+}
+function assemble(head, text, tail) {
+  const len = []; wVar(len, text.length);
+  const out = new Uint8Array(head.length + len.length + text.length + tail.length);
+  let p = 0;
+  out.set(head, p); p += head.length;
+  out.set(len, p); p += len.length;
+  out.set(text, p); p += text.length;
+  out.set(tail, p);
+  return out;
+}
+function parseHeader(u8) {
+  const st = { i: 0 };
+  if (u8.length < 2) throw 0;
+  const flags = u8[st.i++], mode = (flags & 1) ? 'mexicano' : 'americano';
+  const total = (flags & 8) ? rVar(u8, st) : TOTALS[(flags >> 1) & 3];
+  const cBits = (flags >> 4) & 15, courts = cBits === 15 ? rVar(u8, st) : cBits + 1;
+  if (total < 1 || courts < 1) throw 0;
+  const tLen = rVar(u8, st);
+  if (st.i + tLen > u8.length) throw 0;
+  const rawText = u8.subarray(st.i, st.i + tLen); st.i += tLen;
+  return { mode, total, courts, rawText, st };
+}
+function parseBody(hdr, textBytes, u8) {
+  const { mode, total, courts, st } = hdr;
+  const str = td.decode(textBytes), sep = str.indexOf('\0');
+  if (sep < 0) throw 0;
+  const defName = mode === 'mexicano' ? 'Padel Mexicano' : 'Padel Americano';
+  const name = str.slice(0, sep) || defName;
+  const players = str.slice(sep + 1).split('\n'), n = players.length;
+  if (n < 4 || players.some(p => !p)) throw 0;
+  const R = rVar(u8, st), nc = Math.min(courts, Math.floor(n / 4));
+  if (R < 1 || R > 500 || nc < 1) throw 0;
+  let big = 0n;
+  for (let i = u8.length - 1; i >= st.i; i--) big = (big << 8n) | BigInt(u8[i]);
+  const take = b => { const bb = BigInt(b), v = Number(big % bb); big /= bb; return v; };
+  const rounds = [];
+  for (let ri = 0; ri < R; ri++) {
+    const pool = Array.from({ length: n }, (_, i) => i), m = [];
+    for (let c = 0; c < nc; c++) {
+      const p = [];
+      for (let k = 0; k < 4; k++) p.push(pool.splice(take(pool.length), 1)[0]);
+      const sv = take(total + 2), sa = sv === 0 ? null : sv - 1;
+      m.push({ c, a: [p[0], p[1]], b: [p[2], p[3]], sa, sb: sa == null ? null : total - sa });
+    }
+    rounds.push({ m, bye: pool });
+  }
+  if (big !== 0n) throw 0;
+  return { name, mode, total, courts, players, rounds };
+}
+function decodeHashSync(h) {
+  if (!h || !h.startsWith('#1')) return null;
+  try {
+    const u8 = fromB64u(h.slice(2)), hdr = parseHeader(u8);
+    return parseBody(hdr, hdr.rawText, u8);
+  } catch (e) { return null; }
+}
+async function decodeHash(h) {
+  if (!h || (h[1] !== '1' && h[1] !== '2') || h[0] !== '#') return null;
+  try {
+    const u8 = fromB64u(h.slice(2)), hdr = parseHeader(u8);
+    const textBytes = h[1] === '2' ? await pipeStream(hdr.rawText, DecompressionStream) : hdr.rawText;
+    return parseBody(hdr, textBytes, u8);
+  } catch (e) { return null; }
+}
+
+let hashGen = 0;
+const setHash = h => { try { history.replaceState(null, '', h ? '#' + h : location.pathname + location.search); } catch (e) {} };
+function syncHash() {
+  const gen = ++hashGen;
+  if (!S) { setHash(''); return; }
+  const { head, text, tail } = packParts(S);
+  setHash('1' + toB64u(assemble(head, text, tail)));
+  if (text.length >= 24 && typeof CompressionStream !== 'undefined') {
+    pipeStream(text, CompressionStream).then(comp => {
+      if (gen === hashGen && comp.length < text.length) setHash('2' + toB64u(assemble(head, comp, tail)));
+    }).catch(() => {});
+  }
+}
+async function bestUrl() {
+  if (!S) return location.href;
+  const { head, text, tail } = packParts(S);
+  let h = '1' + toB64u(assemble(head, text, tail));
+  if (text.length >= 24 && typeof CompressionStream !== 'undefined') {
+    try {
+      const comp = await pipeStream(text, CompressionStream);
+      if (comp.length < text.length) h = '2' + toB64u(assemble(head, comp, tail));
+    } catch (e) {}
+  }
+  setHash(h);
+  return location.href;
+}
+
 let S = null;
-try { S = JSON.parse(localStorage.getItem(KEY)); if (!S || !S.rounds || !S.rounds.length) S = null; } catch (e) { S = null; }
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const saveLocal = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
+const save = () => { saveLocal(); syncHash(); };
 const DKEY = 'padel-draft-v1';
 const saveDraft = () => { try { draft ? localStorage.setItem(DKEY, JSON.stringify(draft)) : localStorage.removeItem(DKEY); } catch (e) {} };
 
 let draft = null;
-try { draft = JSON.parse(localStorage.getItem(DKEY)); if (!draft || typeof draft.text !== 'string') draft = null; } catch (e) { draft = null; }
-let view = S && !draft ? 'board' : 'setup';
+function loadLocal() {
+  try { S = JSON.parse(localStorage.getItem(KEY)); if (!S || !S.rounds || !S.rounds.length) S = null; } catch (e) { S = null; }
+  try { draft = JSON.parse(localStorage.getItem(DKEY)); if (!draft || typeof draft.text !== 'string') draft = null; } catch (e) { draft = null; }
+  view = S && !draft ? 'board' : 'setup';
+}
+let view = 'setup';
 let scoring = null, confirmCb = null, opener = null;
 const pname = i => S.players[i];
 
@@ -389,6 +537,7 @@ function openMenu(btn) {
   const R = S.rounds.length, rc = btn.getBoundingClientRect();
   layer.innerHTML = `<div class="ov" data-act="close" style="background:transparent;animation:none"></div>
     <div class="menu" role="menu" style="top:${rc.bottom + 6}px;right:${Math.max(8, innerWidth - rc.right)}px">
+    <button data-act="share" role="menuitem">Copy share link</button>
     <button data-act="history" role="menuitem">Round history &amp; edit results</button>
     <button data-act="undo" role="menuitem">${R > 1 ? `Remove round ${R}` : 'Reshuffle round 1'}</button>
     <button data-act="new" role="menuitem" class="dng">New tournament…</button></div>`;
@@ -425,6 +574,21 @@ document.addEventListener('click', e => {
     case 'ok': { const cb = confirmCb; closeLayer(); cb && cb(); break; }
     case 'next': if (S.rounds.every(x => x.m.every(m => m.sa != null))) { makeRound(); save(); render(); } break;
     case 'menu': openMenu(el); break;
+    case 'share': {
+      bestUrl().then(async url => {
+        let ok = false;
+        try { await navigator.clipboard.writeText(url); ok = true; } catch (err) {}
+        if (!ok) {
+          const ta = document.createElement('textarea');
+          ta.value = url; ta.style.cssText = 'position:fixed;opacity:0';
+          document.body.appendChild(ta); ta.select();
+          try { ok = document.execCommand('copy'); } catch (err) {}
+          ta.remove();
+        }
+        if (el.isConnected) el.textContent = ok ? 'Link copied' : 'Copy failed';
+      });
+      break;
+    }
     case 'history': openHistory(); break;
     case 'undo': {
       const R = S.rounds.length, r = S.rounds[R - 1];
@@ -466,10 +630,24 @@ window.addEventListener('storage', e => {
   try { S = JSON.parse(e.newValue); if (!S || !S.rounds || !S.rounds.length) S = null; } catch (err) { S = null; }
   layer.innerHTML = ''; scoring = null; confirmCb = null; opener = null;
   if (!S) view = 'setup';
+  syncHash();
   render();
 });
 
-render();
+window.addEventListener('hashchange', async () => {
+  const decoded = await decodeHash(location.hash);
+  if (!decoded) return;
+  S = decoded; draft = null; saveDraft(); saveLocal();
+  layer.innerHTML = ''; scoring = null; confirmCb = null; opener = null;
+  view = 'board'; render();
+});
+
+const applyDecoded = decoded => {
+  if (decoded) { S = decoded; draft = null; saveDraft(); saveLocal(); view = 'board'; render(); }
+  else { loadLocal(); render(); if (S && view === 'board') syncHash(); }
+};
+if (location.hash.startsWith('#2')) decodeHash(location.hash).then(applyDecoded);
+else applyDecoded(decodeHashSync(location.hash));
 }
 </script>
 </body>

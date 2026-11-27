@@ -337,3 +337,138 @@ test.describe('layout', () => {
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('URL fragment sharing', () => {
+  test('persists state in the URL fragment without polluting browser history', async ({ page }) => {
+    await start(page);
+    const histLen = await page.evaluate(() => history.length);
+    const h1 = await page.evaluate(() => location.hash);
+    expect(h1).toMatch(/^#[12][A-Za-z0-9_-]+$/);
+
+    await page.locator('.court').first().click();
+    await page.click('[data-act=pick][data-v="15"]');
+    const h2 = await page.evaluate(() => location.hash);
+    expect(h2).toMatch(/^#[12][A-Za-z0-9_-]+$/);
+    expect(h2).not.toBe(h1);
+
+    await finishRound(page);
+    await page.click('[data-act=next]');
+    const h3 = await page.evaluate(() => location.hash);
+    expect(h3).not.toBe(h2);
+    expect(await page.evaluate(() => history.length)).toBe(histLen);
+  });
+
+  test('opening a shared URL in a fresh browser restores the full tournament', async ({ page, browser }) => {
+    const names = ['João Moreno', 'Smith, John', '<b>Ana</b>', 'Bruno', 'Carla', 'Diego', 'Elena', 'Felix', 'Gina', 'Hugo'];
+    await start(page, { name: 'Sexta 🎾', mode: 'mexicano', points: 21, courts: 2, names });
+    await finishRound(page, i => [15, 7][i]);
+    await page.click('[data-act=next]');
+    await page.locator('.court').first().click();
+    await page.click('[data-act=pick][data-v="11"]');
+
+    const orig = await state(page);
+    const origPts = await standingsPts(page);
+    const sharedUrl = page.url();
+
+    const freshCtx = await browser.newContext();
+    await freshCtx.route('**/*', r => r.request().url().startsWith(URL)
+      ? r.fulfill({ status: 200, contentType: 'text/html', body: HTML })
+      : r.abort());
+    const p2 = await freshCtx.newPage();
+    await p2.goto(sharedUrl);
+    await expect(p2.locator('.rnd')).toHaveText('Round 2');
+    await expect(p2.locator('.top .ttl')).toHaveText('Sexta 🎾');
+    expect(await standingsPts(p2)).toEqual(origPts);
+
+    const restored = await state(p2);
+    expect(restored.name).toBe(orig.name);
+    expect(restored.mode).toBe(orig.mode);
+    expect(restored.total).toBe(orig.total);
+    expect(restored.courts).toBe(orig.courts);
+    expect(restored.players).toEqual(orig.players);
+    expect(restored.rounds.length).toBe(orig.rounds.length);
+    for (let i = 0; i < orig.rounds.length; i++) {
+      expect(restored.rounds[i].m).toEqual(orig.rounds[i].m);
+      expect([...restored.rounds[i].bye].sort((a, b) => a - b)).toEqual([...orig.rounds[i].bye].sort((a, b) => a - b));
+    }
+    await freshCtx.close();
+  });
+
+  test('shared URL takes precedence over existing localStorage and draft', async ({ page, browser }) => {
+    await start(page, { name: 'First' });
+    const urlA = page.url();
+
+    const ctx2 = await browser.newContext();
+    await ctx2.route('**/*', r => r.request().url().startsWith(URL)
+      ? r.fulfill({ status: 200, contentType: 'text/html', body: HTML })
+      : r.abort());
+    const other = await ctx2.newPage();
+    await start(other, { name: 'Second', names: NAMES18.slice(0, 8), courts: 2 });
+    await other.click('[data-act=menu]');
+    await other.click('[data-act=new]');
+    await other.fill('#tn', 'Unsaved draft');
+
+    await other.goto(urlA);
+    await expect(other.locator('.top .ttl')).toHaveText('First');
+    await expect(other.locator('.rnd')).toHaveText('Round 1');
+    await ctx2.close();
+  });
+
+  test('corrupt or unknown URL hashes fall back cleanly without errors', async ({ page }) => {
+    const errors = [];
+    page.on('pageerror', e => errors.push(String(e)));
+    for (const bad of ['#garbage', '#1!!!', '#1AAAA', '#2AAAA', '#2eJw']) {
+      await page.goto(URL + bad);
+      await expect(page.locator('#sf')).toBeVisible();
+    }
+    expect(errors).toEqual([]);
+  });
+
+  test('hashchange switches to the tournament in the new fragment', async ({ page }) => {
+    await start(page, { name: 'Tourney A', names: NAMES18.slice(0, 8), courts: 2 });
+    const hashA = await page.evaluate(() => location.hash);
+
+    await page.click('[data-act=menu]');
+    await page.click('[data-act=new]');
+    await page.fill('#tn', 'Tourney B');
+    await page.click('button[type=submit]');
+    await page.click('[data-act=ok]');
+    await expect(page.locator('.top .ttl')).toHaveText('Tourney B');
+
+    await page.evaluate(h => { location.hash = h; }, hashA);
+    await expect(page.locator('.top .ttl')).toHaveText('Tourney A');
+  });
+
+  test('compresses large tournaments tightly and uses deflate for longer name lists', async ({ page }) => {
+    const fullNames = [
+      'João Moreno', 'Ana Silva', 'Bruno Santos', 'Carla Oliveira',
+      'Diego Costa', 'Elena Pereira', 'Felix Rodrigues', 'Gina Martins',
+      'Hugo Ferreira', 'Iris Almeida', 'Jonas Ribeiro', 'Katja Sousa',
+      'Luca Carvalho', 'Mara Teixeira', 'Nico Mendes', 'Olga Fernandes',
+    ];
+    await start(page, { name: 'Friday Club Americano', names: fullNames, courts: 4 });
+    for (let r = 0; r < 5; r++) { await finishRound(page, 13); await page.click('[data-act=next]'); }
+
+    await expect.poll(() => page.evaluate(() => location.hash)).toMatch(/^#2[A-Za-z0-9_-]+$/);
+    const hash = await page.evaluate(() => location.hash);
+    const jsonLen = await page.evaluate(() => localStorage.getItem('padel-tourney-v1').length);
+    expect(hash.length).toBeLessThan(350);
+    expect(hash.length).toBeLessThan(jsonLen / 4);
+  });
+
+  test('Copy share link copies the current URL', async ({ page }) => {
+    await start(page, { name: 'Share me' });
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: t => { window.__copied = t; return Promise.resolve(); } },
+      });
+    });
+    await page.click('[data-act=menu]');
+    await page.click('[data-act=share]');
+    await expect(page.locator('[data-act=share]')).toHaveText('Link copied');
+    const copied = await page.evaluate(() => window.__copied);
+    expect(copied).toBe(page.url());
+    expect(copied).toMatch(/#[12][A-Za-z0-9_-]+$/);
+  });
+});
