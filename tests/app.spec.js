@@ -471,4 +471,75 @@ test.describe('URL fragment sharing', () => {
     expect(copied).toBe(page.url());
     expect(copied).toMatch(/#[12][A-Za-z0-9_-]+$/);
   });
+
+  test('ending a tournament shows only final standings and shrinks the URL', async ({ page, browser }) => {
+    await start(page, { name: 'Club Night', mode: 'mexicano', points: 21, courts: 4, names: NAMES18.slice(0, 16) });
+    for (let r = 0; r < 4; r++) { await finishRound(page, i => [15, 13, 11, 18][i]); await page.click('[data-act=next]'); }
+    // On round 5 with 0 results entered, capture active URL and standings
+    const activeHash = await page.evaluate(() => location.hash);
+    const expectedPts = await standingsPts(page);
+
+    await page.click('[data-act=menu]');
+    await page.click('[data-act=end]');
+    await page.click('[data-act=ok]');
+
+    await expect(page.locator('.rnd')).toHaveText('Final');
+    await expect(page.locator('.court')).toHaveCount(0);
+    await expect(page.locator('.rank h2 small')).toHaveText('After 4 rounds');
+    await expect(page).toHaveTitle('Club Night · Final');
+
+    await expect.poll(() => page.evaluate(() => location.hash)).toMatch(/^#[34][A-Za-z0-9_-]+$/);
+    const finalHash = await page.evaluate(() => location.hash);
+    expect(finalHash.length).toBeLessThan(activeHash.length);
+
+    // Open in a fresh browser: should render only the final standings table with identical scores
+    const freshCtx = await browser.newContext();
+    await freshCtx.route('**/*', r => r.request().url().startsWith(URL)
+      ? r.fulfill({ status: 200, contentType: 'text/html', body: HTML })
+      : r.abort());
+    const p2 = await freshCtx.newPage();
+    await p2.goto(URL + finalHash);
+    await expect(p2.locator('.rnd')).toHaveText('Final');
+    await expect(p2.locator('.court')).toHaveCount(0);
+    await expect(p2.locator('.rank h2 small')).toHaveText('After 4 rounds');
+    expect(await standingsPts(p2)).toEqual(expectedPts);
+    await freshCtx.close();
+  });
+
+  test('ending a tournament with sit-outs preserves half points and diffs across share URL', async ({ page, browser }) => {
+    await start(page, { name: 'Sitout Cup', points: 21, courts: 4, names: NAMES18 });
+    await finishRound(page, 14);
+    await page.click('[data-act=next]');
+    await finishRound(page, 8);
+    const expectedRows = await page.evaluate(() => [...document.querySelectorAll('.rr')].map(r => ({
+      rank: r.querySelector('.pos b').textContent,
+      nm: r.querySelector('.pn').textContent,
+      w: r.querySelectorAll('.cn')[0].textContent,
+      diff: r.querySelectorAll('.cn')[1].textContent,
+      pts: r.querySelectorAll('.cn')[2].textContent,
+    })));
+
+    await page.click('[data-act=menu]');
+    await page.click('[data-act=end]');
+    await page.click('[data-act=ok]');
+    await expect(page.locator('.rnd')).toHaveText('Final');
+    const finalUrl = page.url();
+
+    const freshCtx = await browser.newContext();
+    await freshCtx.route('**/*', r => r.request().url().startsWith(URL)
+      ? r.fulfill({ status: 200, contentType: 'text/html', body: HTML })
+      : r.abort());
+    const p2 = await freshCtx.newPage();
+    await p2.goto(finalUrl);
+    await expect(p2.locator('.rnd')).toHaveText('Final');
+    const restoredRows = await p2.evaluate(() => [...document.querySelectorAll('.rr')].map(r => ({
+      rank: r.querySelector('.pos b').textContent,
+      nm: r.querySelector('.pn').textContent,
+      w: r.querySelectorAll('.cn')[0].textContent,
+      diff: r.querySelectorAll('.cn')[1].textContent,
+      pts: r.querySelectorAll('.cn')[2].textContent,
+    })));
+    expect(restoredRows).toEqual(expectedRows);
+    await freshCtx.close();
+  });
 });
