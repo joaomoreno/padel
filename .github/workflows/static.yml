@@ -56,7 +56,7 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Collect site files
         # Publish only the app, not tests or tooling
-        run: mkdir _site && cp index.html LICENSE _site/
+        run: mkdir _site && cp index.html sw.js LICENSE _site/
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

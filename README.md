@@ -12,4 +12,4 @@ npx playwright install chromium   # or set CHROME_PATH=/path/to/chrome to use an
 npm test
 ```
 
-CI runs them on every push and pull request; GitHub Pages only deploys from `main` after they pass, and only publishes `index.html` and `LICENSE`.
+CI runs them on every push and pull request; GitHub Pages only deploys from `main` after they pass, and only publishes `index.html`, `sw.js`, and `LICENSE`.
